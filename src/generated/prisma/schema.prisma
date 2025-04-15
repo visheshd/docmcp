@@ -38,16 +38,15 @@ model Document {
 }
 
 model Chunk {
-  id         String                      @id @default(uuid())
-  document   Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  documentId String                      @map("document_id")
-  content    String                      @db.Text
-  embedding  Unsupported("vector(1536)")
+  id         String   @id @default(uuid())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String   @map("document_id")
+  content    String   @db.Text
+  embedding  Float[]
   metadata   Json // { title: string, order: number, type: string }
-  createdAt  DateTime                    @default(now()) @map("created_at")
-  updatedAt  DateTime                    @updatedAt @map("updated_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  @@index([embedding])
   @@map("chunks")
 }
 

@@ -134,6 +134,7 @@ exports.Prisma.ChunkScalarFieldEnum = {
   id: 'id',
   documentId: 'documentId',
   content: 'content',
+  embedding: 'embedding',
   metadata: 'metadata',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
