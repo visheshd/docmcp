@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import config from './config';
 import logger from './utils/logger';
 import healthRoutes from './routes/health';
+import mcpRoutes from './routes/mcp';
 import { errorHandler } from './middleware/errorHandler';
 
 // Create Express app
@@ -20,6 +21,7 @@ app.use(express.json());
 
 // Routes
 app.use('/health', healthRoutes);
+app.use('/mcp', mcpRoutes);
 
 // Error handling - must be after routes
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
