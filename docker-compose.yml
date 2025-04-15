@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  postgres:
+    image: ankane/pgvector:latest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: docmcp
+    ports:
+      - "5433:5432"  # Using 5433 to avoid conflict with existing PostgreSQL
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data: 

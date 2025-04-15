@@ -1,0 +1,74 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+model Document {
+  id              String    @id @default(uuid())
+  url             String
+  title           String
+  content         String    @db.Text
+  metadata        Json      // { package: string, version: string, type: string, tags: string[] }
+  crawlDate       DateTime  @map("crawl_date")
+  level           Int
+  parentDocument  Document? @relation("DocumentToDocument", fields: [parentDocumentId], references: [id], onDelete: SetNull)
+  parentDocumentId String?  @map("parent_document_id")
+  childDocuments  Document[] @relation("DocumentToDocument")
+  chunks          Chunk[]
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([url])
+  @@index([title])
+  @@index([crawlDate])
+  @@map("documents")
+}
+
+model Chunk {
+  id          String   @id @default(uuid())
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId  String   @map("document_id")
+  content     String   @db.Text
+  embedding   Unsupported("vector(1536)")
+  metadata    Json     // { title: string, order: number, type: string }
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([embedding])
+  @@map("chunks")
+}
+
+enum JobStatus {
+  pending
+  running
+  completed
+  failed
+}
+
+model Job {
+  id        String    @id @default(uuid())
+  url       String
+  status    JobStatus @default(pending)
+  progress  Float     @default(0)
+  startDate DateTime  @map("start_date")
+  endDate   DateTime? @map("end_date")
+  error     String?   @db.Text
+  stats     Json      @default("{ \"pagesProcessed\": 0, \"pagesSkipped\": 0, \"totalChunks\": 0 }")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@map("jobs")
+}

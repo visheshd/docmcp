@@ -107,54 +107,68 @@ Documentation Agent is a self-hosted MCP (Model Calling Protocol) server that en
 ### Data Models
 
 **Document**
-```typescript
-interface Document {
-  id: string;                // Unique identifier
-  url: string;               // Source URL
-  title: string;             // Document title
-  content: string;           // Raw markdown content
-  metadata: {                // Document metadata
-    package: string;         // Library/package name
-    version: string;         // Documentation version
-    type: string;            // API/Guide/Reference
-    tags: string[];          // Custom tags
-  };
-  crawlDate: Date;           // Date indexed
-  level: number;             // Depth level from root
-  parentDocumentId: string;  // Parent document ID
+```prisma
+model Document {
+  id              String    @id @default(uuid())
+  url             String
+  title           String
+  content         String    @db.Text
+  metadata        Json      // { package: string, version: string, type: string, tags: string[] }
+  crawlDate       DateTime  @map("crawl_date")
+  level           Int
+  parentDocument  Document? @relation("DocumentToDocument", fields: [parentDocumentId], references: [id], onDelete: SetNull)
+  parentDocumentId String?  @map("parent_document_id")
+  childDocuments  Document[] @relation("DocumentToDocument")
+  chunks          Chunk[]
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([url])
+  @@index([title])
+  @@index([crawlDate])
+  @@map("documents")
 }
 ```
 
 **Chunk**
-```typescript
-interface Chunk {
-  id: string;                // Unique identifier
-  documentId: string;        // Parent document ID
-  content: string;           // Chunk text content
-  embedding: number[];       // Vector embedding
-  metadata: {                // Chunk metadata
-    title: string;           // Section title
-    order: number;           // Order in document
-    type: string;            // Content type (code, text, etc.)
-  };
+```prisma
+model Chunk {
+  id          String   @id @default(uuid())
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId  String   @map("document_id")
+  content     String   @db.Text
+  embedding   Float[]  @db.Float[]
+  metadata    Json     // { title: string, order: number, type: string }
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([embedding(ops: VectorCosine)], type: Ivfflat)
+  @@map("chunks")
 }
 ```
 
 **Job**
-```typescript
-interface Job {
-  id: string;                // Unique job identifier
-  url: string;               // Root URL
-  status: string;            // 'pending'|'running'|'completed'|'failed'
-  progress: number;          // Completion percentage
-  startDate: Date;           // Start timestamp
-  endDate: Date;             // Completion timestamp
-  error: string;             // Error message if failed
-  stats: {                   // Job statistics
-    pagesProcessed: number;
-    pagesSkipped: number;
-    totalChunks: number;
-  };
+```prisma
+enum JobStatus {
+  pending
+  running
+  completed
+  failed
+}
+
+model Job {
+  id        String    @id @default(uuid())
+  url       String
+  status    JobStatus @default(pending)
+  progress  Float     @default(0)
+  startDate DateTime  @map("start_date")
+  endDate   DateTime? @map("end_date")
+  error     String?   @db.Text
+  stats     Json      @default("{ \"pagesProcessed\": 0, \"pagesSkipped\": 0, \"totalChunks\": 0 }")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@map("jobs")
 }
 ```
 
@@ -194,6 +208,7 @@ interface GetJobStatusParams {
 
 - Node.js runtime environment
 - PostgreSQL database with pgvector extension
+- Prisma ORM for database management
 - Docker and Docker Compose for containerization
 - Minimum 4GB RAM and 2 CPU cores for reasonable performance
 - Storage requirements depend on documentation size (estimate ~100MB per medium-sized library documentation)
