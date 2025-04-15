@@ -1,0 +1,405 @@
+# Documentation Agent MCP - Product Requirements Document
+
+## Overview
+Documentation Agent is a self-hosted MCP (Model Calling Protocol) server that enables developers to access up-to-date technical documentation directly within their coding environment. By crawling documentation websites, converting them to LLM-friendly formats, and providing semantic search capabilities through MCP tool calls, Documentation Agent eliminates context switching and enhances coding productivity. This tool is designed specifically for developers using Cursor who need immediate access to accurate, current documentation for libraries and frameworks they're working with.
+
+## Core Features
+
+### Documentation Indexing via MCP Tool Call
+- **What it does**: Allows developers to add new technical documentation by providing a URL directly from within Cursor via a simple tool call
+- **Why it's important**: Eliminates the need to leave the coding environment to set up documentation references
+- **How it works**: The MCP server exposes an `add_documentation` tool call that triggers a crawler to process the documentation site up to a specified depth, converting it to markdown and storing it with vector embeddings
+
+### Documentation Querying and Retrieval
+- **What it does**: Enables natural language queries about libraries, frameworks, and programming concepts with responses sourced directly from official documentation
+- **Why it's important**: Provides accurate, up-to-date answers that may not be in LLM training data
+- **How it works**: Queries are processed by the MCP server which performs vector similarity search against indexed documentation and returns relevant information with source citations
+
+### Smart Code Context Awareness
+- **What it does**: Automatically detects libraries and packages being used in the current code and suggests relevant documentation
+- **Why it's important**: Proactively brings helpful information to developers without requiring explicit queries
+- **How it works**: Analyzes import statements and code context to identify relevant documentation that has been previously indexed
+
+### Progress Tracking and Management
+- **What it does**: Provides visibility into documentation indexing jobs and their status
+- **Why it's important**: Gives developers confidence that documentation is being processed correctly
+- **How it works**: Exposes job status information through MCP tool calls that can be queried to check progress, completion percentage, and any errors
+
+## User Experience
+
+### User Personas
+
+**Alex - Frontend Developer**
+- Works with multiple JavaScript frameworks and libraries
+- Frequently needs to look up API details and examples
+- Wants to stay in flow while coding and avoid context switching
+
+**Taylor - Full Stack Developer**
+- Works across multiple languages and frameworks
+- Needs to frequently reference documentation for various libraries
+- Values accurate information over potentially outdated LLM knowledge
+
+**Jordan - Team Lead**
+- Wants to ensure team members have consistent access to documentation
+- Needs to keep the team productive with minimal context switching
+- Values tools that integrate into existing workflows
+
+### Key User Flows
+
+**Adding New Documentation**
+1. User encounters a need for documentation while coding in Cursor
+2. User asks Cursor to add documentation: "Add React documentation from reactjs.org"
+3. Cursor makes an MCP tool call to the Documentation Agent
+4. Documentation Agent begins crawling and provides a job ID
+5. User can continue coding while processing happens in background
+6. User receives notification when documentation is ready for querying
+
+**Querying Documentation**
+1. User has a question about a library while coding: "How do I use React hooks for state management?"
+2. Cursor detects that React documentation is available in the Documentation Agent
+3. Cursor makes an MCP tool call to query the documentation
+4. Documentation Agent returns relevant information with source citations
+5. User receives an answer directly within Cursor with links to specific documentation sections
+
+**Discovering Available Documentation**
+1. User wants to know what documentation is available: "What documentation do I have indexed?"
+2. Cursor makes an MCP tool call to list available documentation
+3. Documentation Agent returns a list of indexed documentation with metadata
+4. User can select specific documentation to query or request new documentation be added
+
+### UI/UX Considerations
+- No separate UI required - all interactions happen directly within Cursor
+- Progress indicators for long-running indexing jobs
+- Clear citation of documentation sources in responses
+- Minimal configuration required for initial setup
+
+## Technical Architecture
+
+### System Components
+
+**Crawler Service**
+- Accepts documentation URLs and crawl parameters
+- Uses Cheerio for HTML parsing with potential for Puppeteer integration in v2
+- Follows documentation site structure up to specified depth
+- Respects robots.txt and implements rate limiting
+- Detects and processes pagination and navigation patterns
+
+**Document Processor**
+- Converts HTML to clean, structured markdown
+- Preserves code blocks with syntax highlighting
+- Handles tables and complex formatting
+- Removes navigation elements, footers, and non-content areas
+- Extracts metadata (titles, sections, hierarchies)
+
+**Vector Database**
+- PostgreSQL with pgvector extension
+- Stores document content, metadata, and vector embeddings
+- Enables semantic similarity search
+- Maintains relationships between chunks and source documents
+
+**MCP Server**
+- Implements Model Calling Protocol API (OpenAI Function Calling format)
+- Exposes tool calls for adding, querying, and managing documentation
+- Processes natural language queries
+- Returns formatted responses with citations
+- Monitors indexing job status
+
+### Data Models
+
+**Document**
+```typescript
+interface Document {
+  id: string;                // Unique identifier
+  url: string;               // Source URL
+  title: string;             // Document title
+  content: string;           // Raw markdown content
+  metadata: {                // Document metadata
+    package: string;         // Library/package name
+    version: string;         // Documentation version
+    type: string;            // API/Guide/Reference
+    tags: string[];          // Custom tags
+  };
+  crawlDate: Date;           // Date indexed
+  level: number;             // Depth level from root
+  parentDocumentId: string;  // Parent document ID
+}
+```
+
+**Chunk**
+```typescript
+interface Chunk {
+  id: string;                // Unique identifier
+  documentId: string;        // Parent document ID
+  content: string;           // Chunk text content
+  embedding: number[];       // Vector embedding
+  metadata: {                // Chunk metadata
+    title: string;           // Section title
+    order: number;           // Order in document
+    type: string;            // Content type (code, text, etc.)
+  };
+}
+```
+
+**Job**
+```typescript
+interface Job {
+  id: string;                // Unique job identifier
+  url: string;               // Root URL
+  status: string;            // 'pending'|'running'|'completed'|'failed'
+  progress: number;          // Completion percentage
+  startDate: Date;           // Start timestamp
+  endDate: Date;             // Completion timestamp
+  error: string;             // Error message if failed
+  stats: {                   // Job statistics
+    pagesProcessed: number;
+    pagesSkipped: number;
+    totalChunks: number;
+  };
+}
+```
+
+### API and Integrations
+
+**MCP Tool Calls**
+
+```typescript
+// Add documentation
+interface AddDocumentationParams {
+  url: string;               // Required: Documentation root URL
+  depth?: number;            // Optional: Crawl depth (default: 3)
+  name?: string;             // Optional: Custom name
+  tags?: string[];           // Optional: Custom tags
+}
+
+// Query documentation
+interface QueryDocumentationParams {
+  query: string;             // Required: Natural language query
+  context?: string;          // Optional: Current code context
+  package?: string;          // Optional: Filter by package
+}
+
+// List documentation
+interface ListDocumentationParams {
+  tags?: string[];           // Optional: Filter by tags
+  status?: string;           // Optional: Filter by status
+}
+
+// Get job status
+interface GetJobStatusParams {
+  jobId: string;             // Required: Job identifier
+}
+```
+
+### Infrastructure Requirements
+
+- Node.js runtime environment
+- PostgreSQL database with pgvector extension
+- Docker and Docker Compose for containerization
+- Minimum 4GB RAM and 2 CPU cores for reasonable performance
+- Storage requirements depend on documentation size (estimate ~100MB per medium-sized library documentation)
+
+## Development Roadmap
+
+### Phase 1: Foundation (MVP)
+- Project setup with TypeScript, Express, and PostgreSQL/pgvector
+- Basic MCP server implementation with OpenAI Function Calling format
+- Core data models and database schema
+- Simple Cheerio-based crawler for basic HTML sites
+- Document processor to convert HTML to markdown
+- Document chunking and embedding generation
+- Basic vector search functionality
+- Implementation of `add_documentation` and `query_documentation` tool calls
+- Basic error handling and logging
+- Docker Compose setup for local deployment
+
+### Phase 2: Enhanced Functionality
+- Job management system with progress tracking
+- Implementation of `list_documentation` and `get_job_status` tool calls
+- Rate limiting and robots.txt compliance
+- Better document structure detection (navigation, content areas)
+- Improved metadata extraction
+- Enhanced chunking strategies for better context
+- Support for incremental updates to documentation
+- Handling of redirects and different URL patterns
+- Basic authentication for the MCP server
+
+### Phase 3: Integration and Usability
+- Automatic library detection from code context
+- Improved search relevance and ranking
+- Enhanced citation formatting
+- Support for code snippets and examples in responses
+- Documentation version awareness
+- Support for authentication to access private documentation sites
+- Configuration options for embeddings and chunking
+- Performance optimizations for faster indexing and querying
+
+### Phase 4: Advanced Features
+- Puppeteer integration for JavaScript-heavy sites
+- Regular background updates to keep documentation fresh
+- Support for additional documentation formats (beyond HTML)
+- Advanced query capabilities (filtering, sorting, etc.)
+- Cross-reference support between different documentation sources
+- Collaborative features for team documentation sharing
+- Plugin system for custom document processors
+
+## Logical Dependency Chain
+
+1. **Core MCP Server Infrastructure**
+   - Express server setup with MCP protocol support
+   - Basic tool call structure and routing
+   - PostgreSQL with pgvector setup
+   - Core data models and schema
+
+2. **Basic Documentation Processing**
+   - Simple Cheerio-based crawler
+   - HTML to markdown conversion
+   - Basic document chunking
+   - Embedding generation
+
+3. **Fundamental Tool Calls**
+   - `add_documentation` implementation
+   - `query_documentation` implementation
+   - Simple vector search functionality
+
+4. **Deployable MVP Package**
+   - Docker containerization
+   - Configuration management
+   - Basic error handling
+   - Initial documentation
+
+5. **Enhanced Crawler and Document Processing**
+   - Improved HTML parsing and structure detection
+   - Better chunking strategies
+   - Metadata extraction enhancements
+   - Rate limiting and robots.txt compliance
+
+6. **Job Management System**
+   - Job tracking and status updates
+   - Progress reporting
+   - `get_job_status` tool call implementation
+
+7. **Documentation Management**
+   - `list_documentation` tool call implementation
+   - Documentation filtering and organization
+   - Incremental updates and versioning
+
+8. **Integration Enhancements**
+   - Code context awareness
+   - Library detection from imports
+   - Enhanced response formatting with citations
+   - Improved search relevance
+
+9. **Advanced Features**
+   - Puppeteer integration
+   - Additional documentation formats
+   - Regular update mechanisms
+   - Collaborative features
+
+## Risks and Mitigations
+
+### Technical Challenges
+
+**Challenge**: Handling diverse documentation structures and formats
+- **Mitigation**: Start with well-structured documentation sites (like React, Node.js) for initial testing
+- **Mitigation**: Implement adaptive parsing that can detect common documentation patterns
+- **Mitigation**: Build a plugin system for custom document processors in later phases
+
+**Challenge**: Effective document chunking for vector search
+- **Mitigation**: Implement multiple chunking strategies and test with various documentation types
+- **Mitigation**: Use metadata and document structure to guide chunking decisions
+- **Mitigation**: Allow configuration of chunking parameters based on documentation type
+
+**Challenge**: Accurate semantic search across technical content
+- **Mitigation**: Test multiple embedding models to find optimal performance for technical documentation
+- **Mitigation**: Implement hybrid search combining vector similarity with keyword matching
+- **Mitigation**: Use document metadata to improve search context and relevance
+
+### MVP Scoping
+
+**Challenge**: Determining minimum viable functionality
+- **Mitigation**: Focus on the core workflow of adding and querying documentation
+- **Mitigation**: Start with simple HTML sites that don't require JavaScript rendering
+- **Mitigation**: Build a solid MCP foundation that can be extended in future phases
+
+**Challenge**: Balancing simplicity with usefulness
+- **Mitigation**: Ensure the initial version works well with popular documentation sites
+- **Mitigation**: Gather feedback on most important documentation types to support first
+- **Mitigation**: Provide configuration options for advanced users
+
+### Resource Constraints
+
+**Challenge**: Performance with large documentation sets
+- **Mitigation**: Implement pagination and limit crawl depth by default
+- **Mitigation**: Use efficient vector storage and indexing techniques
+- **Mitigation**: Provide clear guidance on hardware requirements for different scales
+
+**Challenge**: Memory usage during crawling and embedding
+- **Mitigation**: Process documents in batches to manage memory usage
+- **Mitigation**: Implement configurable concurrency limits
+- **Mitigation**: Use streaming processing where possible
+
+## Appendix
+
+### Popular Documentation Structures
+
+The following documentation structures have been analyzed for compatibility:
+
+**React Documentation**
+- Structure: Section-based with clear navigation
+- JavaScript heavy: Yes (for examples)
+- Special considerations: Interactive examples need special handling
+
+**Node.js API Documentation**
+- Structure: Well-organized with consistent formatting
+- JavaScript heavy: No
+- Special considerations: Multiple versions available
+
+**TypeScript Handbook**
+- Structure: Linear with clear sections
+- JavaScript heavy: No
+- Special considerations: Code examples need syntax highlighting preservation
+
+**PostgreSQL Documentation**
+- Structure: Hierarchical with deep nesting
+- JavaScript heavy: No
+- Special considerations: Contains complex tables and command syntax
+
+### MCP Protocol Reference
+
+The MCP server implements the OpenAI Function Calling format:
+
+```json
+{
+  "functions": [
+    {
+      "name": "add_documentation",
+      "description": "Add new technical documentation to the index",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The root URL of the documentation to index"
+          },
+          "depth": {
+            "type": "integer",
+            "description": "Maximum crawl depth (default: 3)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Custom name for the documentation"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Custom tags for organization"
+          }
+        },
+        "required": ["url"]
+      }
+    }
+  ]
+}
+```
