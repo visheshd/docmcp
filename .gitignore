@@ -2,6 +2,10 @@
 node_modules/
 .pnpm-store/
 
+#jest
+coverage/
+
+
 # Build output
 dist/
 
