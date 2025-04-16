@@ -6,6 +6,7 @@ import logger from './utils/logger';
 import healthRoutes from './routes/health';
 import mcpRoutes from './routes/mcp';
 import { errorHandler } from './middleware/errorHandler';
+import { registerAllTools } from './services/mcp-tools';
 
 // Create Express app
 const app = express();
@@ -18,6 +19,9 @@ app.use(cors({
 
 // Parse JSON bodies
 app.use(express.json());
+
+// Register MCP tools
+registerAllTools();
 
 // Routes
 app.use('/health', healthRoutes);
@@ -33,6 +37,7 @@ const startServer = () => {
   try {
     app.listen(config.server.port, () => {
       logger.info(`Server started in ${config.server.nodeEnv} mode on port ${config.server.port}`);
+      logger.info(`MCP server is available at http://localhost:${config.server.port}/mcp`);
     });
   } catch (error) {
     logger.error('Error starting server:', error);
