@@ -1,14 +1,20 @@
-import prisma from '../config/database';
-import type { Job, JobStatus } from '../generated/prisma';
+import { getPrismaClient as getMainPrismaClient } from '../config/database';
+import { PrismaClient, Job, JobStatus } from '../generated/prisma';
 import logger from '../utils/logger';
 
 export class JobService {
+  private prisma: PrismaClient;
+
+  constructor(prismaClient?: PrismaClient) {
+    this.prisma = prismaClient || getMainPrismaClient();
+  }
+
   /**
    * Create a new job
    */
   async createJob(data: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>) {
     try {
-      const job = await prisma.job.create({
+      const job = await this.prisma.job.create({
         data: {
           ...data,
           stats: data.stats || {},
@@ -26,7 +32,7 @@ export class JobService {
    */
   async findJobById(id: string) {
     try {
-      const job = await prisma.job.findUnique({
+      const job = await this.prisma.job.findUnique({
         where: { id },
       });
       return job;
@@ -41,7 +47,7 @@ export class JobService {
    */
   async findJobsByStatus(status: JobStatus) {
     try {
-      const jobs = await prisma.job.findMany({
+      const jobs = await this.prisma.job.findMany({
         where: { status },
         orderBy: { createdAt: 'desc' },
       });
@@ -57,7 +63,7 @@ export class JobService {
    */
   async updateJobProgress(id: string, status: JobStatus, progress: number) {
     try {
-      const job = await prisma.job.update({
+      const job = await this.prisma.job.update({
         where: { id },
         data: {
           status,
@@ -77,7 +83,7 @@ export class JobService {
    */
   async updateJobError(id: string, error: string) {
     try {
-      const job = await prisma.job.update({
+      const job = await this.prisma.job.update({
         where: { id },
         data: {
           status: 'failed',
@@ -97,7 +103,7 @@ export class JobService {
    */
   async updateJobStats(id: string, stats: { pagesProcessed: number; pagesSkipped: number; totalChunks: number }) {
     try {
-      const job = await prisma.job.update({
+      const job = await this.prisma.job.update({
         where: { id },
         data: {
           stats,
@@ -115,7 +121,7 @@ export class JobService {
    */
   async deleteJob(id: string) {
     try {
-      const job = await prisma.job.delete({
+      const job = await this.prisma.job.delete({
         where: { id },
       });
       return job;

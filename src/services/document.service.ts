@@ -1,14 +1,20 @@
-import prisma from '../config/database';
-import type { Document } from '../generated/prisma';
+import { getPrismaClient } from '../config/database';
+import { PrismaClient, Prisma } from '../generated/prisma';
 import logger from '../utils/logger';
 
 export class DocumentService {
+  private prisma: PrismaClient;
+
+  constructor() {
+    this.prisma = getPrismaClient();
+  }
+
   /**
    * Create a new document
    */
-  async createDocument(data: Omit<Document, 'id' | 'createdAt' | 'updatedAt'>) {
+  async createDocument(data: Omit<Prisma.DocumentCreateInput, 'id' | 'createdAt' | 'updatedAt'>) {
     try {
-      const document = await prisma.document.create({
+      const document = await this.prisma.document.create({
         data,
         include: {
           chunks: true,
@@ -26,7 +32,7 @@ export class DocumentService {
    */
   async findDocumentById(id: string) {
     try {
-      const document = await prisma.document.findUnique({
+      const document = await this.prisma.document.findUnique({
         where: { id },
         include: {
           chunks: true,
@@ -45,7 +51,7 @@ export class DocumentService {
    */
   async findDocumentsByUrl(url: string) {
     try {
-      const documents = await prisma.document.findMany({
+      const documents = await this.prisma.document.findMany({
         where: { url },
         include: {
           chunks: true,
@@ -61,9 +67,9 @@ export class DocumentService {
   /**
    * Update a document
    */
-  async updateDocument(id: string, data: Partial<Omit<Document, 'id' | 'createdAt' | 'updatedAt'>>) {
+  async updateDocument(id: string, data: Prisma.DocumentUpdateInput) {
     try {
-      const document = await prisma.document.update({
+      const document = await this.prisma.document.update({
         where: { id },
         data,
         include: {
@@ -82,7 +88,7 @@ export class DocumentService {
    */
   async deleteDocument(id: string) {
     try {
-      const document = await prisma.document.delete({
+      const document = await this.prisma.document.delete({
         where: { id },
       });
       return document;

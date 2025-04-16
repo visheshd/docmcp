@@ -7,7 +7,7 @@ describe('JobService Integration Tests', () => {
   const prisma = getTestPrismaClient();
 
   beforeAll(async () => {
-    jobService = new JobService();
+    jobService = new JobService(prisma);
   });
 
   beforeEach(async () => {

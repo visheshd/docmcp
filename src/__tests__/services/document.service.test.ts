@@ -1,6 +1,6 @@
 import { DocumentService } from '../../services/document.service';
 import { getTestPrismaClient } from '../utils/testDb';
-import type { Document } from '../../generated/prisma';
+import { PrismaClient, Prisma } from '../../generated/prisma';
 
 describe('DocumentService Integration Tests', () => {
   let documentService: DocumentService;
@@ -18,14 +18,13 @@ describe('DocumentService Integration Tests', () => {
 
   describe('createDocument', () => {
     it('should create a document successfully', async () => {
-      const testDoc: Omit<Document, 'id' | 'createdAt' | 'updatedAt'> = {
+      const testDoc: Omit<Prisma.DocumentCreateInput, 'id' | 'createdAt' | 'updatedAt'> = {
         url: 'https://test.com/docs',
         title: 'Test Documentation',
         content: 'Test content',
         metadata: { package: 'test', version: '1.0.0', type: 'api', tags: ['test'] },
         crawlDate: new Date(),
         level: 1,
-        parentDocumentId: null,
       };
 
       const result = await documentService.createDocument(testDoc);

@@ -1,6 +1,15 @@
 import { getPrismaClient } from '../config/database';
 import { PrismaClient, Prisma } from '../generated/prisma';
 import logger from '../utils/logger';
+import pgvector from 'pgvector';
+
+// Define input types matching the data needed for raw queries
+interface CreateChunkInput {
+  documentId: string;
+  content: string;
+  embedding: number[]; // Expecting number[] directly
+  metadata?: Prisma.InputJsonValue;
+}
 
 export class ChunkService {
   private prisma: PrismaClient;
@@ -12,15 +21,19 @@ export class ChunkService {
   /**
    * Create a new chunk
    */
-  async createChunk(data: Prisma.ChunkCreateInput) {
+  async createChunk(data: CreateChunkInput) {
+    const { documentId, content, embedding, metadata } = data;
+
+    if (!documentId || !embedding) {
+      throw new Error("documentId and embedding are required to create a chunk.");
+    }
+
+    const embeddingSql = pgvector.toSql(embedding);
+    const metadataSql = metadata ? JSON.stringify(metadata) : null;
+
     try {
-      const chunk = await this.prisma.chunk.create({
-        data,
-        include: {
-          document: true,
-        },
-      });
-      return chunk;
+      const result = await this.prisma.$executeRaw`INSERT INTO "chunks" ("document_id", "content", "embedding", "metadata") VALUES (${documentId}, ${content}, ${embeddingSql}::vector, ${metadataSql}::jsonb)`;
+      logger.info(`Created chunk, result: ${result}`);
     } catch (error) {
       logger.error('Error creating chunk:', error);
       throw error;
@@ -30,19 +43,26 @@ export class ChunkService {
   /**
    * Create multiple chunks in a transaction
    */
-  async createManyChunks(chunks: Prisma.ChunkCreateManyInput[], documentId: string) {
+  async createManyChunks(chunks: CreateChunkInput[], documentId: string): Promise<void> {
+    if (!chunks.length) {
+      return;
+    }
+
+    logger.info(`Attempting to create ${chunks.length} chunks for document ${documentId} in a transaction.`);
+
     try {
-      const createdChunks = await this.prisma.$transaction(async (tx) => {
-        return await tx.chunk.createMany({
-          data: chunks.map(chunk => ({
-            ...chunk,
-            documentId
-          })),
-        });
+      await this.prisma.$transaction(async (tx) => {
+        for (const chunk of chunks) {
+          const { content, embedding, metadata } = chunk;
+          const embeddingSql = pgvector.toSql(embedding);
+          const metadataSql = metadata ? JSON.stringify(metadata) : null;
+
+          await tx.$executeRaw`INSERT INTO "chunks" ("document_id", "content", "embedding", "metadata") VALUES (${documentId}, ${content}, ${embeddingSql}::vector, ${metadataSql}::jsonb)`;
+        }
       });
-      return createdChunks;
+      logger.info(`Successfully created ${chunks.length} chunks for document ${documentId}`);
     } catch (error) {
-      logger.error('Error creating chunks:', error);
+      logger.error(`Error creating chunks for document ${documentId}:`, error);
       throw error;
     }
   }
@@ -63,15 +83,21 @@ export class ChunkService {
         similarity: number;
       };
 
-      const results = await this.prisma.$queryRaw`
+      // Convert the embedding array to the string format expected by pgvector
+      // Ensure the string is properly quoted for direct SQL injection (hence using $queryRawUnsafe)
+      const embeddingString = `'[${embedding.join(',')}]'`;
+
+      const query = `
         SELECT c.*, d.url, d.title,
-          (c.embedding <=> ${embedding}::float[]) as similarity
+          (c.embedding <=> ${embeddingString}::vector) as similarity
         FROM chunks c
         JOIN documents d ON c.document_id = d.id
         ORDER BY similarity ASC
         LIMIT ${limit}
-      ` as ChunkResult[];
+      `;
       
+      const results = await this.prisma.$queryRawUnsafe<ChunkResult[]>(query);
+
       return results;
     } catch (error) {
       logger.error('Error finding similar chunks:', error);

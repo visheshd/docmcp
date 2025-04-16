@@ -50,7 +50,7 @@ async function clearDatabase() {
  * Set up test database:
  * 1. Run migrations to ensure schema is up to date
  * 2. Initialize Prisma client and connect
- * 3. Create vector extension and index
+ * 3. Create vector extension
  * 4. Clear all tables except migrations
  * 5. Return initialized PrismaClient
  */
@@ -64,6 +64,16 @@ export async function setupTestDatabase() {
     
     // Initialize client after migrations
     const prisma = getPrismaClient();
+
+    // Ensure pgvector extension is created in the test database
+    try {
+      await prisma.$executeRaw`CREATE EXTENSION IF NOT EXISTS vector;`;
+      console.log('pgvector extension created in test database.');
+    } catch (extError) {
+      console.error('Error creating pgvector extension:', extError);
+      // Decide if we should throw or just warn
+      // throw extError; 
+    }
     
     // Clear all tables except _prisma_migrations
     console.log('Clearing database...');

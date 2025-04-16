@@ -43,6 +43,7 @@
     "openai": "^4.89.0",
     "ora": "^8.2.0",
     "pg": "^8.14.1",
+    "pgvector": "^0.2.0",
     "prisma": "^6.6.0",
     "reflect-metadata": "^0.2.2",
     "task-master-ai": "^0.11.1",
