@@ -1,14 +1,20 @@
-import prisma from '../config/database';
-import { Chunk, PrismaClient, Prisma } from '../generated/prisma';
+import { getPrismaClient } from '../config/database';
+import { PrismaClient, Prisma } from '../generated/prisma';
 import logger from '../utils/logger';
 
 export class ChunkService {
+  private prisma: PrismaClient;
+
+  constructor() {
+    this.prisma = getPrismaClient();
+  }
+
   /**
    * Create a new chunk
    */
   async createChunk(data: Prisma.ChunkCreateInput) {
     try {
-      const chunk = await prisma.chunk.create({
+      const chunk = await this.prisma.chunk.create({
         data,
         include: {
           document: true,
@@ -26,7 +32,7 @@ export class ChunkService {
    */
   async createManyChunks(chunks: Prisma.ChunkCreateManyInput[], documentId: string) {
     try {
-      const createdChunks = await prisma.$transaction(async (tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use'>) => {
+      const createdChunks = await this.prisma.$transaction(async (tx) => {
         return await tx.chunk.createMany({
           data: chunks.map(chunk => ({
             ...chunk,
@@ -57,7 +63,7 @@ export class ChunkService {
         similarity: number;
       };
 
-      const results = await prisma.$queryRaw`
+      const results = await this.prisma.$queryRaw`
         SELECT c.*, d.url, d.title,
           (c.embedding <=> ${embedding}::float[]) as similarity
         FROM chunks c
@@ -78,7 +84,7 @@ export class ChunkService {
    */
   async updateChunk(id: string, data: Prisma.ChunkUpdateInput) {
     try {
-      const chunk = await prisma.chunk.update({
+      const chunk = await this.prisma.chunk.update({
         where: { id },
         data,
       });
@@ -94,13 +100,33 @@ export class ChunkService {
    */
   async deleteChunksByDocumentId(documentId: string) {
     try {
-      await prisma.chunk.deleteMany({
+      await this.prisma.chunk.deleteMany({
         where: {
           documentId,
         },
       });
     } catch (error) {
       logger.error('Error deleting chunks:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get chunks with optional ordering
+   */
+  async getChunks(options?: {
+    orderBy?: Prisma.ChunkOrderByWithRelationInput;
+  }) {
+    try {
+      const chunks = await this.prisma.chunk.findMany({
+        orderBy: options?.orderBy,
+        include: {
+          document: true,
+        },
+      });
+      return chunks;
+    } catch (error) {
+      logger.error('Error getting chunks:', error);
       throw error;
     }
   }

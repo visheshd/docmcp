@@ -1,18 +1,13 @@
 import { JobService } from '../../services/job.service';
-import { setupTestDatabase, teardownTestDatabase, getTestPrismaClient } from '../utils/testDb';
+import { getTestPrismaClient } from '../utils/testDb';
 import type { Job, JobStatus } from '../../generated/prisma';
 
 describe('JobService Integration Tests', () => {
   let jobService: JobService;
-  let prisma: any;
+  const prisma = getTestPrismaClient();
 
   beforeAll(async () => {
-    prisma = await setupTestDatabase();
     jobService = new JobService();
-  });
-
-  afterAll(async () => {
-    await teardownTestDatabase();
   });
 
   beforeEach(async () => {

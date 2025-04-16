@@ -9,7 +9,10 @@ export class JobService {
   async createJob(data: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>) {
     try {
       const job = await prisma.job.create({
-        data,
+        data: {
+          ...data,
+          stats: data.stats || {},
+        },
       });
       return job;
     } catch (error) {

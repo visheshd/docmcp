@@ -1,40 +1,40 @@
-import { ChunkService } from '../../services/chunk.service';
 import { setupTestDatabase, teardownTestDatabase, getTestPrismaClient } from '../utils/testDb';
-import type { Chunk, Document } from '../../generated/prisma';
+import { ChunkService } from '../../services/chunk.service';
+import { PrismaClient, Prisma } from '../../generated/prisma';
+
+let prisma: PrismaClient;
+let chunkService: ChunkService;
+let testDocument: Prisma.DocumentGetPayload<{}>;
+
+beforeAll(async () => {
+  prisma = await setupTestDatabase();
+  chunkService = new ChunkService();
+});
+
+afterAll(async () => {
+  await teardownTestDatabase();
+});
+
+beforeEach(async () => {
+  // Clean up the database before each test
+  await prisma.chunk.deleteMany();
+  await prisma.document.deleteMany();
+
+  // Create a test document for chunks
+  testDocument = await prisma.document.create({
+    data: {
+      url: 'https://test.com/docs',
+      title: 'Test Documentation',
+      content: 'Test content',
+      metadata: { package: 'test', version: '1.0.0', type: 'api', tags: ['test'] },
+      crawlDate: new Date(),
+      level: 1,
+      parentDocumentId: null,
+    },
+  });
+});
 
 describe('ChunkService Integration Tests', () => {
-  let chunkService: ChunkService;
-  let testDocument: Document;
-  let prisma: any;
-
-  beforeAll(async () => {
-    prisma = await setupTestDatabase();
-    chunkService = new ChunkService();
-  });
-
-  afterAll(async () => {
-    await teardownTestDatabase();
-  });
-
-  beforeEach(async () => {
-    // Clean up the database before each test
-    await prisma.chunk.deleteMany();
-    await prisma.document.deleteMany();
-
-    // Create a test document for chunks
-    testDocument = await prisma.document.create({
-      data: {
-        url: 'https://test.com/docs',
-        title: 'Test Documentation',
-        content: 'Test content',
-        metadata: { package: 'test', version: '1.0.0', type: 'api', tags: ['test'] },
-        crawlDate: new Date(),
-        level: 1,
-        parentDocumentId: null,
-      },
-    });
-  });
-
   describe('createChunk', () => {
     it('should create a chunk successfully', async () => {
       const testChunk = {
@@ -55,7 +55,7 @@ describe('ChunkService Integration Tests', () => {
 
   describe('createManyChunks', () => {
     it('should create multiple chunks in a transaction', async () => {
-      const chunks = [
+      const chunkData = [
         {
           documentId: testDocument.id,
           content: 'Chunk 1 content',
@@ -70,11 +70,19 @@ describe('ChunkService Integration Tests', () => {
         },
       ];
 
-      const results = await chunkService.createManyChunks(chunks, testDocument.id);
+      // Create the chunks
+      const result = await chunkService.createManyChunks(chunkData, testDocument.id);
+      expect(result.count).toBe(2);
 
-      expect(results).toHaveLength(2);
-      expect(results[0].content).toBe('Chunk 1 content');
-      expect(results[1].content).toBe('Chunk 2 content');
+      // Fetch the created chunks to verify their content
+      const createdChunks = await prisma.chunk.findMany({
+        where: { documentId: testDocument.id },
+        orderBy: { createdAt: 'asc' }
+      });
+
+      expect(createdChunks).toHaveLength(2);
+      expect(createdChunks[0].content).toBe('Chunk 1 content');
+      expect(createdChunks[1].content).toBe('Chunk 2 content');
     });
   });
 
@@ -155,6 +163,14 @@ describe('ChunkService Integration Tests', () => {
       });
 
       expect(remainingChunks).toHaveLength(0);
+    });
+  });
+
+  describe('getChunks', () => {
+    it('should get chunks', async () => {
+      const chunks = await chunkService.getChunks();
+      expect(chunks).toBeDefined();
+      expect(Array.isArray(chunks)).toBe(true);
     });
   });
 }); 

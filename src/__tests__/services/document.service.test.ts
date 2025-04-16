@@ -1,18 +1,13 @@
 import { DocumentService } from '../../services/document.service';
-import { setupTestDatabase, teardownTestDatabase, getTestPrismaClient } from '../utils/testDb';
+import { getTestPrismaClient } from '../utils/testDb';
 import type { Document } from '../../generated/prisma';
 
 describe('DocumentService Integration Tests', () => {
   let documentService: DocumentService;
-  let prisma: any;
+  const prisma = getTestPrismaClient();
 
   beforeAll(async () => {
-    prisma = await setupTestDatabase();
     documentService = new DocumentService();
-  });
-
-  afterAll(async () => {
-    await teardownTestDatabase();
   });
 
   beforeEach(async () => {
