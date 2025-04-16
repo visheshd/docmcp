@@ -1,7 +1,8 @@
-import { getPrismaClient } from '../config/database';
+import { getPrismaClient as getMainPrismaClient } from '../config/database';
 import { PrismaClient, Prisma } from '../generated/prisma';
 import logger from '../utils/logger';
 import pgvector from 'pgvector';
+import crypto from 'crypto';
 
 // Define input types matching the data needed for raw queries
 interface CreateChunkInput {
@@ -9,13 +10,14 @@ interface CreateChunkInput {
   content: string;
   embedding: number[]; // Expecting number[] directly
   metadata?: Prisma.InputJsonValue;
+  id?: string; // Allow optional ID for direct insertion if needed, but generate if not provided
 }
 
 export class ChunkService {
   private prisma: PrismaClient;
 
-  constructor() {
-    this.prisma = getPrismaClient();
+  constructor(prismaClient?: PrismaClient) {
+    this.prisma = prismaClient || getMainPrismaClient();
   }
 
   /**
@@ -23,6 +25,7 @@ export class ChunkService {
    */
   async createChunk(data: CreateChunkInput) {
     const { documentId, content, embedding, metadata } = data;
+    const id = data.id || crypto.randomUUID(); // Generate UUID if not provided
 
     if (!documentId || !embedding) {
       throw new Error("documentId and embedding are required to create a chunk.");
@@ -32,8 +35,8 @@ export class ChunkService {
     const metadataSql = metadata ? JSON.stringify(metadata) : null;
 
     try {
-      const result = await this.prisma.$executeRaw`INSERT INTO "chunks" ("document_id", "content", "embedding", "metadata") VALUES (${documentId}, ${content}, ${embeddingSql}::vector, ${metadataSql}::jsonb)`;
-      logger.info(`Created chunk, result: ${result}`);
+      const result = await this.prisma.$executeRaw`INSERT INTO "chunks" ("id", "document_id", "content", "embedding", "metadata", "created_at", "updated_at") VALUES (${id}, ${documentId}, ${content}, ${embeddingSql}::vector, ${metadataSql}::jsonb, NOW(), NOW())`;
+      logger.info(`Created chunk with ID ${id}, result: ${result}`);
     } catch (error) {
       logger.error('Error creating chunk:', error);
       throw error;
@@ -54,10 +57,11 @@ export class ChunkService {
       await this.prisma.$transaction(async (tx) => {
         for (const chunk of chunks) {
           const { content, embedding, metadata } = chunk;
+          const id = chunk.id || crypto.randomUUID(); // Generate UUID for each chunk
           const embeddingSql = pgvector.toSql(embedding);
           const metadataSql = metadata ? JSON.stringify(metadata) : null;
 
-          await tx.$executeRaw`INSERT INTO "chunks" ("document_id", "content", "embedding", "metadata") VALUES (${documentId}, ${content}, ${embeddingSql}::vector, ${metadataSql}::jsonb)`;
+          await tx.$executeRaw`INSERT INTO "chunks" ("id", "document_id", "content", "embedding", "metadata", "created_at", "updated_at") VALUES (${id}, ${documentId}, ${content}, ${embeddingSql}::vector, ${metadataSql}::jsonb, NOW(), NOW())`;
         }
       });
       logger.info(`Successfully created ${chunks.length} chunks for document ${documentId}`);
@@ -75,7 +79,6 @@ export class ChunkService {
       type ChunkResult = {
         id: string;
         content: string;
-        embedding: number[];
         metadata: Prisma.JsonValue;
         documentId: string;
         url: string;
@@ -83,20 +86,23 @@ export class ChunkService {
         similarity: number;
       };
 
-      // Convert the embedding array to the string format expected by pgvector
-      // Ensure the string is properly quoted for direct SQL injection (hence using $queryRawUnsafe)
-      const embeddingString = `'[${embedding.join(',')}]'`;
+      const embeddingSql = pgvector.toSql(embedding);
 
-      const query = `
-        SELECT c.*, d.url, d.title,
-          (c.embedding <=> ${embeddingString}::vector) as similarity
+      const results = await this.prisma.$queryRaw<ChunkResult[]>`
+        SELECT
+          c.id,
+          c.content,
+          c.metadata,
+          c.document_id AS "documentId",
+          d.url,
+          d.title,
+          -- Use cosine similarity (<=>). Higher values mean more similar.
+          (c.embedding <=> ${embeddingSql}::vector) as similarity
         FROM chunks c
         JOIN documents d ON c.document_id = d.id
-        ORDER BY similarity ASC
+        ORDER BY similarity DESC -- Order by cosine similarity descending
         LIMIT ${limit}
       `;
-      
-      const results = await this.prisma.$queryRawUnsafe<ChunkResult[]>(query);
 
       return results;
     } catch (error) {
@@ -110,11 +116,37 @@ export class ChunkService {
    */
   async updateChunk(id: string, data: Prisma.ChunkUpdateInput) {
     try {
-      const chunk = await this.prisma.chunk.update({
-        where: { id },
-        data,
-      });
-      return chunk;
+      // Prepare fields for raw query
+      const updates = [];
+      const values = [];
+      if (data.content !== undefined) {
+        updates.push(`"content" = $${values.length + 1}`);
+        values.push(data.content);
+      }
+      if (data.embedding !== undefined) {
+        updates.push(`"embedding" = $${values.length + 1}::vector`);
+        values.push(pgvector.toSql(data.embedding as number[]));
+      }
+      if (data.metadata !== undefined) {
+        updates.push(`"metadata" = $${values.length + 1}::jsonb`);
+        values.push(JSON.stringify(data.metadata));
+      }
+
+      if (updates.length === 0) {
+        logger.warn(`No fields to update for chunk ${id}`);
+        return; // Or perhaps fetch and return the existing chunk?
+      }
+
+      // Always update the updated_at timestamp
+      updates.push(`"updated_at" = NOW()`);
+
+      const query = `UPDATE "chunks" SET ${updates.join(', ')} WHERE "id" = $${values.length + 1}`;
+      values.push(id);
+
+      await this.prisma.$executeRawUnsafe(query, ...values);
+      logger.info(`Updated chunk with ID ${id}`);
+      // Since we used executeRaw, we don't get the updated object back directly.
+      // The calling code (like tests) will need to fetch it separately if needed.
     } catch (error) {
       logger.error('Error updating chunk:', error);
       throw error;

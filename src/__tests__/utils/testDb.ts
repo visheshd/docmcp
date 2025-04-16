@@ -12,8 +12,6 @@ let prisma: PrismaClient;
 function getPrismaClient() {
   if (!prisma) {
     // Run prisma generate first
-    console.log('Running prisma generate...');
-    execSync('npx prisma generate', { stdio: 'inherit' });
     
     console.log('Initializing Prisma client...');
     prisma = new PrismaClient({
@@ -78,6 +76,19 @@ export async function setupTestDatabase() {
     // Clear all tables except _prisma_migrations
     console.log('Clearing database...');
     await clearDatabase();
+
+    // Explicitly (re)create vector index after clearing (might be redundant but ensures it exists)
+    try {
+      await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops);`;
+      console.log('HNSW index on chunks(embedding) created/ensured.');
+      // Analyze the table to update statistics for the query planner
+      await prisma.$executeRaw`ANALYZE chunks;`; 
+      console.log('Analyzed chunks table.');
+    } catch (indexError) {
+      console.error('Error creating HNSW index or analyzing table:', indexError);
+      // Decide if we should throw or just warn
+      // throw indexError;
+    }
     
     return prisma;
   } catch (error) {
