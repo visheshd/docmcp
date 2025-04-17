@@ -39,11 +39,13 @@ export class CodeContextService {
     relevantDocumentIds: string[];
     enhancedQuery?: string;
   }> {
+    logger.info(`Analyzing code context for filename: ${filename || 'unknown'}...`);
+    const startTime = Date.now();
     try {
       // Parse and extract packages
       const packages = getPackagesFromCode(code, filename);
       
-      logger.debug(`Detected packages: ${packages.join(', ')}`);
+      logger.debug(`Detected packages: ${packages.join(', ') || 'None'}`);
       
       // Find documentation for detected packages
       const documentMappings = await this.findDocumentationForPackages(packages);
@@ -53,6 +55,9 @@ export class CodeContextService {
       
       // Create enhanced query based on code context
       const enhancedQuery = this.createEnhancedQuery(code, packages);
+      
+      const duration = Date.now() - startTime;
+      logger.info(`Code context analysis completed in ${duration}ms.`);
       
       return {
         packages,
@@ -73,6 +78,7 @@ export class CodeContextService {
    */
   private async findDocumentationForPackages(packages: string[]): Promise<PackageDocumentationMapping[]> {
     if (!packages.length) return [];
+    logger.debug(`Finding document mappings for packages: ${packages.join(', ')}`);
     
     try {
       const mappings: PackageDocumentationMapping[] = [];
@@ -142,9 +148,13 @@ export class CodeContextService {
             documentIds: allDocIds.map(doc => doc.id),
             confidenceScore: allDocIds.reduce((avg, doc) => avg + doc.confidence, 0) / allDocIds.length
           });
+          logger.debug(`Found ${allDocIds.length} potential documents for package '${packageName}'.`);
+        } else {
+          logger.debug(`No potential documents found for package '${packageName}'.`);
         }
       }
       
+      logger.debug(`Found mappings for ${mappings.length} out of ${packages.length} packages.`);
       return mappings;
     } catch (error) {
       logger.error('Error finding documentation for packages:', error);
@@ -156,6 +166,7 @@ export class CodeContextService {
    * Extract the most relevant document IDs from mappings
    */
   private getRelevantDocumentIds(mappings: PackageDocumentationMapping[]): string[] {
+    logger.debug(`Extracting relevant document IDs from ${mappings.length} package mappings.`);
     // Create a map to track highest confidence for each document
     const docConfidenceMap = new Map<string, number>();
     
@@ -173,9 +184,12 @@ export class CodeContextService {
       .sort((a, b) => b[1] - a[1]);
     
     // Return top 20 document IDs, or all if fewer than 20
-    return sortedEntries
+    const finalIds = sortedEntries
       .slice(0, 20)
       .map(entry => entry[0]);
+      
+    logger.debug(`Identified ${docConfidenceMap.size} unique documents. Returning top ${finalIds.length} document IDs.`);
+    return finalIds;
   }
 
   /**
@@ -183,6 +197,7 @@ export class CodeContextService {
    */
   private createEnhancedQuery(code: string, packages: string[]): string | undefined {
     if (!packages.length) return undefined;
+    logger.debug('Creating enhanced query from code context...');
     
     // Parse full code to get more detailed info
     const detectedPackages = parseCode(code);
@@ -220,18 +235,23 @@ export class CodeContextService {
       components.push(`API references: ${apiCandidates.join(', ')}`);
     }
     
-    return components.join('. ');
+    const enhancedQuery = components.join('. ');
+    logger.debug(`Generated enhanced query: "${enhancedQuery}"`);
+    return enhancedQuery;
   }
 
   /**
    * Generate documentation suggestions based on code context
    */
   async generateContextualSuggestions(code: string, filename?: string, limit: number = 3): Promise<DocumentSuggestion[]> {
+    logger.info(`Generating top ${limit} contextual suggestions for filename: ${filename || 'unknown'}...`);
+    const startTime = Date.now();
     try {
       // Analyze code context
       const { packages, relevantDocumentIds } = await this.analyzeCodeContext(code, filename);
       
       if (packages.length === 0 || relevantDocumentIds.length === 0) {
+        logger.info('No packages or relevant documents found from context analysis. Returning no suggestions.');
         return [];
       }
       
@@ -288,18 +308,24 @@ export class CodeContextService {
           highestScore = 0.1;
         }
         
-        return {
+        const suggestion = {
           package: bestMatchPackage,
           title: doc.title,
           url: doc.url,
           confidence: highestScore
         };
+        logger.debug(`Suggestion score for "${doc.title}": ${highestScore.toFixed(3)} (best match: ${bestMatchPackage || 'N/A'})`);
+        return suggestion;
       });
       
       // Sort by confidence and take the top 'limit' results
-      return suggestions
+      const finalSuggestions = suggestions
         .sort((a, b) => b.confidence - a.confidence)
         .slice(0, limit);
+        
+      const duration = Date.now() - startTime;
+      logger.info(`Generated ${finalSuggestions.length} contextual suggestions in ${duration}ms.`);
+      return finalSuggestions;
       
     } catch (error) {
       logger.error('Error generating contextual suggestions:', error);

@@ -5,6 +5,9 @@ import { DocumentService } from '../document.service';
 import { PrismaClient } from '../../generated/prisma';
 import { getPrismaClient as getMainPrismaClient } from '../../config/database';
 import { DocumentProcessorService } from '../document-processor.service';
+import { CodeContextService } from '../code-context.service';
+import { DocumentationMapperService } from '../documentation-mapper.service';
+import { getPackagesFromCode } from '../../utils/code-parser';
 
 // Define the tool function schema following OpenAI Function Calling format
 const queryDocumentationFunction: MCPFunction = {
@@ -259,6 +262,13 @@ function formatResponseString(response: FormattedResponse): string {
 // Implement the tool handler
 const queryDocumentationHandler = async (params: QueryDocumentationParams) => {
   logger.info(`Query documentation tool called with query: ${params.query}`);
+  const hasCodeContext = !!params.context;
+  
+  if (hasCodeContext) {
+    logger.info('Code context provided, enhancing search with context analysis');
+  } else {
+    logger.info('No code context provided.');
+  }
 
   try {
     // Use the provided Prisma client or get the main one
@@ -267,18 +277,124 @@ const queryDocumentationHandler = async (params: QueryDocumentationParams) => {
     // Initialize services
     const documentProcessorService = new DocumentProcessorService(prisma);
     const chunkService = new ChunkService(prisma);
+    const codeContextService = new CodeContextService(prisma);
+    const documentationMapperService = new DocumentationMapperService(prisma);
+    
+    // Process context if provided
+    let enhancedQuery = params.query;
+    let contextualPackages: string[] = [];
+    let contextualDocumentIds: string[] = [];
+    let packageSuggestions: any[] = [];
+    let contextAnalysisSuccessful = false;
+    
+    if (hasCodeContext) {
+      try {
+        // Extract code context information
+        logger.debug('Analyzing code context...');
+        const { packages, relevantDocumentIds, enhancedQuery: contextQuery } = 
+          await codeContextService.analyzeCodeContext(params.context!, params.package);
+        
+        contextualPackages = packages;
+        contextualDocumentIds = relevantDocumentIds;
+        contextAnalysisSuccessful = true;
+        
+        // Log detected packages
+        logger.debug(`Detected packages from code context: ${contextualPackages.join(', ') || 'None'}`);
+        logger.debug(`Found ${contextualDocumentIds.length} potentially relevant document IDs from context.`);
+        
+        // Get documentation suggestions directly from the code context
+        if (packages.length > 0) {
+          // Find documentation for detected packages using DocumentationMapperService
+          const documentationResults = 
+            await documentationMapperService.findDocumentationForPackages(packages);
+          
+          // Convert to a map for easier access
+          const packageDocs = new Map();
+          documentationResults.forEach((results, packageName) => {
+            packageDocs.set(packageName, results);
+          });
+          
+          // Extract the top results for each package
+          packageSuggestions = [];
+          packages.forEach(packageName => {
+            const packageResults = packageDocs.get(packageName) || [];
+            if (packageResults.length > 0) {
+              packageSuggestions.push({
+                package: packageName,
+                results: packageResults.slice(0, 2)  // Top 2 docs per package
+              });
+            }
+          });
+          
+          logger.debug(`Generated ${packageSuggestions.length} package-specific suggestions.`);
+          
+          // Use the context-enhanced query if available
+          if (contextQuery) {
+            enhancedQuery = contextQuery;
+            logger.debug(`Using enhanced query from context: ${enhancedQuery}`);
+          } else {
+            logger.debug('No enhanced query generated from context.');
+          }
+        }
+      } catch (error) {
+        logger.error('Error processing code context:', error);
+        // Continue with original query if context processing fails
+        logger.warn('Proceeding with original query due to context processing error.');
+      }
+    }
     
     // Generate embedding for the query
-    const queryEmbedding = await documentProcessorService.createEmbedding(params.query);
+    logger.debug(`Generating embedding for query: "${enhancedQuery}"`);
+    const queryEmbedding = await documentProcessorService.createEmbedding(enhancedQuery);
+    
+    // Prepare query options
+    const queryOptions: any = {
+      limit: params.limit || 5
+    };
+    
+    // Add package filter if specified directly or extracted from context
+    let packageFilterApplied: string | null = null;
+    if (params.package) {
+      queryOptions.package = params.package;
+      packageFilterApplied = params.package;
+    } else if (contextualPackages.length === 1) {
+      // If only one package detected from context, use it as filter
+      queryOptions.package = contextualPackages[0];
+      packageFilterApplied = contextualPackages[0];
+    }
+    logger.debug(`Applying package filter: ${packageFilterApplied || 'None'}`);
     
     // Find similar chunks
-    const similarChunks = await chunkService.findSimilarChunks(
+    logger.debug(`Finding up to ${queryOptions.limit} similar chunks...`);
+    let similarChunks = await chunkService.findSimilarChunks(
       queryEmbedding,
-      params.limit || 5,
-      params.package
+      queryOptions.limit,
+      queryOptions.package
     );
+    logger.debug(`Found ${similarChunks.length} initial similar chunks.`);
     
-    if (!similarChunks.length) {
+    // If we have contextual document IDs, boost those results
+    let boostedCount = 0;
+    if (contextualDocumentIds.length > 0 && similarChunks.length > 0) {
+      logger.debug(`Boosting scores for chunks matching ${contextualDocumentIds.length} contextual document IDs.`);
+      // Boost scores for chunks from contextually relevant documents
+      similarChunks = similarChunks.map(chunk => {
+        if (contextualDocumentIds.includes(chunk.documentId)) {
+          // Boost similarity score for contextually relevant chunks
+          chunk.similarity = Math.min(1.0, chunk.similarity + 0.2); // Boost and cap at 1.0
+          boostedCount++;
+          return chunk;
+        }
+        return chunk;
+      });
+      
+      // Re-sort after boosting
+      similarChunks.sort((a, b) => b.similarity - a.similarity);
+      logger.debug(`Boosted scores for ${boostedCount} chunks. Re-sorted results.`);
+    }
+    
+    if (!similarChunks.length && !packageSuggestions.length) {
+      logger.info('No relevant documentation found after searching and context analysis.');
       return {
         message: 'No relevant documentation found for your query.',
         results: []
@@ -286,22 +402,36 @@ const queryDocumentationHandler = async (params: QueryDocumentationParams) => {
     }
 
     // Process chunks into formatted responses
+    logger.debug('Formatting responses and adjusting relevance scores...');
     const formattedResponses: FormattedResponse[] = similarChunks.map(chunk => 
       formatDocumentationResponse(chunk, params.query, params.context)
     );
     
     // Sort by adjusted relevance score
     formattedResponses.sort((a, b) => b.relevanceScore - a.relevanceScore);
+    logger.debug(`Formatted ${formattedResponses.length} responses and sorted by adjusted relevance.`);
     
     // Convert to formatted strings
     const formattedResults = formattedResponses.map(formatResponseString);
 
     // Build a summary response as the first result
     let summary = `# Documentation Results for: "${params.query}"\n\n`;
+    
+    if (contextAnalysisSuccessful) {
+      summary += `## Analysis of Your Code\n`;
+      if (contextualPackages.length > 0) {
+        summary += `Detected packages: ${contextualPackages.join(', ')}\n\n`;
+      } else {
+        summary += `No specific packages detected in your code context.\n\n`;
+      }
+    }
+    
     summary += `Found ${formattedResponses.length} relevant documentation sources.\n\n`;
     
-    if (params.context) {
+    if (contextAnalysisSuccessful) {
       summary += `Code context was used to prioritize relevant results.\n\n`;
+    } else if (hasCodeContext) {
+      summary += `Code context was provided but analysis failed; using original query.\n\n`;
     }
     
     if (params.package) {
@@ -313,10 +443,29 @@ const queryDocumentationHandler = async (params: QueryDocumentationParams) => {
       summary += `${index + 1}. [${response.sourceTitle}](${response.sourceUrl}) - ${response.packageInfo || 'Unknown Package'}\n`;
     });
     
+    // Add package-specific suggestions section if we have them
+    if (packageSuggestions.length > 0) {
+      summary += `\n## Suggested Documentation for Detected Packages\n`;
+      packageSuggestions.forEach(pkg => {
+        summary += `### ${pkg.package}\n`;
+        pkg.results.forEach((doc: any, i: number) => {
+          summary += `${i+1}. [${doc.title}](${doc.url})\n`;
+        });
+        summary += '\n';
+      });
+    }
+    
+    logger.info(`Query processed successfully. Returning ${formattedResults.length} results and ${packageSuggestions.length} package suggestions.`);
+    if (formattedResponses.length > 0) {
+      logger.debug(`Top result: [${formattedResponses[0].sourceTitle}](${formattedResponses[0].sourceUrl}) - Score: ${formattedResponses[0].relevanceScore.toFixed(3)}`);
+    }
+    
     return {
       message: 'Found relevant documentation:',
       summary,
-      results: formattedResults
+      results: formattedResults,
+      detectedPackages: contextualPackages,
+      packageSuggestions
     };
 
   } catch (error) {
