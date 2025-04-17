@@ -7,19 +7,21 @@ jest.mock('../../services/document.service');
 
 describe('DocumentProcessorService', () => {
   let documentProcessorService: DocumentProcessorService;
+  let mockDocumentService: jest.Mocked<DocumentService>;
   const prisma = getTestPrismaClient();
   
   beforeEach(() => {
     jest.clearAllMocks();
     
-    // Reset mock implementation for DocumentService
-    (DocumentService as jest.Mock).mockImplementation(() => ({
+    // Create a mock DocumentService with the methods we need
+    mockDocumentService = {
       updateDocument: jest.fn().mockResolvedValue({ id: 'test-doc-id' }),
       findDocumentById: jest.fn().mockResolvedValue(null),
       createDocument: jest.fn().mockResolvedValue({ id: 'test-doc-id' }),
-    }));
+    } as unknown as jest.Mocked<DocumentService>;
     
-    documentProcessorService = new DocumentProcessorService(prisma);
+    // Create the service with our mock
+    documentProcessorService = new DocumentProcessorService(prisma, mockDocumentService);
   });
   
   describe('processDocument', () => {
@@ -71,8 +73,7 @@ describe('DocumentProcessorService', () => {
       expect(markdown).not.toContain('This should be removed');
       
       // Verify the DocumentService was called to update the document
-      const documentServiceMock = (DocumentService as jest.Mock).mock.instances[0];
-      expect(documentServiceMock.updateDocument).toHaveBeenCalledWith(
+      expect(mockDocumentService.updateDocument).toHaveBeenCalledWith(
         documentId,
         expect.objectContaining({
           content: expect.any(String),
@@ -94,8 +95,7 @@ describe('DocumentProcessorService', () => {
       expect(markdown).toBe('');
       
       // Verify the DocumentService was still called
-      const documentServiceMock = (DocumentService as jest.Mock).mock.instances[0];
-      expect(documentServiceMock.updateDocument).toHaveBeenCalledWith(
+      expect(mockDocumentService.updateDocument).toHaveBeenCalledWith(
         documentId,
         expect.objectContaining({
           content: '',
@@ -126,8 +126,7 @@ describe('DocumentProcessorService', () => {
       await documentProcessorService.processDocument(documentId, html);
       
       // Verify the DocumentService was called with the correct metadata
-      const documentServiceMock = (DocumentService as jest.Mock).mock.instances[0];
-      expect(documentServiceMock.updateDocument).toHaveBeenCalledWith(
+      expect(mockDocumentService.updateDocument).toHaveBeenCalledWith(
         documentId,
         expect.objectContaining({
           metadata: expect.objectContaining({
@@ -186,8 +185,7 @@ describe('DocumentProcessorService', () => {
       expect(markdown).toMatch(/```python\n\s*def hello\(\):/);
       
       // Verify metadata extraction
-      const documentServiceMock = (DocumentService as jest.Mock).mock.instances[0];
-      expect(documentServiceMock.updateDocument).toHaveBeenCalledWith(
+      expect(mockDocumentService.updateDocument).toHaveBeenCalledWith(
         documentId,
         expect.objectContaining({
           metadata: expect.objectContaining({
@@ -240,8 +238,7 @@ describe('DocumentProcessorService', () => {
       expect(markdown).toContain('| Jane | 28 | Designer |');
       
       // Verify metadata extraction
-      const documentServiceMock = (DocumentService as jest.Mock).mock.instances[0];
-      expect(documentServiceMock.updateDocument).toHaveBeenCalledWith(
+      expect(mockDocumentService.updateDocument).toHaveBeenCalledWith(
         documentId,
         expect.objectContaining({
           metadata: expect.objectContaining({

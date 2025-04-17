@@ -40,10 +40,10 @@ export class DocumentProcessorService {
   private chunkService: ChunkService;
   private documentService: DocumentService;
 
-  constructor(prismaClient?: PrismaClient) {
+  constructor(prismaClient?: PrismaClient, documentService?: DocumentService, chunkService?: ChunkService) {
     this.prisma = prismaClient || getMainPrismaClient();
-    this.chunkService = new ChunkService(this.prisma);
-    this.documentService = new DocumentService(this.prisma);
+    this.chunkService = chunkService || new ChunkService(this.prisma);
+    this.documentService = documentService || new DocumentService(this.prisma);
     
     // Initialize Turndown for HTML to Markdown conversion
     this.turndownService = new TurndownService({
@@ -246,12 +246,88 @@ export class DocumentProcessorService {
    * Configure how tables are processed
    */
   private configureTables(): void {
-    // Use a simple approach for table handling
+    // Use a standard table handling approach with clean headers and content
     this.turndownService.addRule('tableSimple', {
       filter: 'table',
-      replacement: function(content) {
-        // Return the content directly, let turndown handle tables with its default implementation
-        return '\n\n' + content + '\n\n';
+      replacement: function(content, node) {
+        // Create a markdown table string
+        let markdown = '\n';
+        
+        // Convert the node to a DOM element and get all rows
+        const rows = Array.from(node.querySelectorAll('tr'));
+        if (!rows || rows.length === 0) {
+          return content; // Fall back to default handling
+        }
+        
+        // Process header row if it exists
+        const headerRow = rows[0];
+        const headerCells = Array.from(headerRow.querySelectorAll('th'));
+        
+        if (headerCells && headerCells.length > 0) {
+          // Process as a table with headers
+          const headers = headerCells.map(cell => cell.textContent?.trim() || ' ');
+          
+          // Add header row
+          markdown += '| ' + headers.join(' | ') + ' |\n';
+          
+          // Add separator row
+          markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
+          
+          // Process data rows (skip the first row if it's all headers)
+          for (let i = headerCells.length === headerRow.children.length ? 1 : 0; i < rows.length; i++) {
+            const row = rows[i];
+            const cells = Array.from(row.querySelectorAll('td'));
+            
+            if (cells && cells.length > 0) {
+              const rowData = cells.map(cell => cell.textContent?.trim() || ' ');
+              
+              // Pad with empty cells if needed
+              while (rowData.length < headers.length) {
+                rowData.push(' ');
+              }
+              
+              markdown += '| ' + rowData.join(' | ') + ' |\n';
+            }
+          }
+        } else {
+          // Process as a table without explicit headers
+          // Use the first row as header
+          const firstRow = rows[0];
+          const firstRowCells = Array.from(firstRow.querySelectorAll('td'));
+          
+          if (firstRowCells && firstRowCells.length > 0) {
+            // Use first row data as column headers
+            const headers = firstRowCells.map(cell => cell.textContent?.trim() || ' ');
+            
+            // Add header row (from first data row)
+            markdown += '| ' + headers.join(' | ') + ' |\n';
+            
+            // Add separator row
+            markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
+            
+            // Add remaining rows
+            for (let i = 1; i < rows.length; i++) {
+              const row = rows[i];
+              const cells = Array.from(row.querySelectorAll('td'));
+              
+              if (cells && cells.length > 0) {
+                const rowData = cells.map(cell => cell.textContent?.trim() || ' ');
+                
+                // Pad with empty cells if needed
+                while (rowData.length < headers.length) {
+                  rowData.push(' ');
+                }
+                
+                markdown += '| ' + rowData.join(' | ') + ' |\n';
+              }
+            }
+          } else {
+            // Fall back to default handling
+            return content;
+          }
+        }
+        
+        return markdown + '\n';
       }
     });
   }
