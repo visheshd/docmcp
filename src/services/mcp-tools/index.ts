@@ -2,6 +2,7 @@ import { registerSampleTool } from './sample.tool';
 import { registerAddDocumentationTool } from './add-documentation.tool';
 import { registerGetJobStatusTool } from './get-job-status.tool';
 import { queryDocumentationTool } from './query-documentation.tool';
+import { registerListDocumentationTool } from './list-documentation.tool';
 import { MCPToolRegistry } from '../../types/mcp';
 import logger from '../../utils/logger';
 
@@ -16,6 +17,7 @@ export const registerAllTools = () => {
   registerSampleTool();
   registerAddDocumentationTool();
   registerGetJobStatusTool();
+  registerListDocumentationTool();
   
   // Register query documentation tool directly since it doesn't have a register function
   try {
