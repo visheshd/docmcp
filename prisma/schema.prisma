@@ -32,6 +32,9 @@ model Document {
   jobId           String?   @map("job_id")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  // New relation to package documentation mapping
+  packageDocMappings PackageDocumentationMapping[]
 
   @@index([url])
   @@index([title])
@@ -129,4 +132,106 @@ model Job {
   @@index([createdAt])
   @@index([priority])
   @@map("jobs")
+}
+
+// New models for package-to-documentation mapping
+
+// Package model
+model Package {
+  id            String    @id @default(uuid())
+  name          String    @unique // Package name
+  language      String    // Programming language (javascript, python, etc.)
+  description   String?   @db.Text
+  repository    String?   // Repository URL
+  homepage      String?   // Homepage URL
+  popularity    Float     @default(0) // Popularity score (for ranking)
+  
+  // Relations
+  versions      PackageVersion[]
+  docMappings   PackageDocumentationMapping[]
+  
+  // Timestamps
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  
+  @@index([name])
+  @@index([language])
+  @@index([popularity])
+  @@map("packages")
+}
+
+// Package version model
+model PackageVersion {
+  id            String    @id @default(uuid())
+  version       String    // Version string
+  package       Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId     String    @map("package_id")
+  releaseDate   DateTime? @map("release_date")
+  isLatest      Boolean   @default(false) @map("is_latest")
+  
+  // Relations
+  docMappings   PackageDocumentationMapping[]
+  
+  // Timestamps
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  
+  @@unique([packageId, version])
+  @@index([version])
+  @@index([isLatest])
+  @@map("package_versions")
+}
+
+// The mapping between packages, versions, and documentation
+model PackageDocumentationMapping {
+  id            String    @id @default(uuid())
+  
+  // Relations
+  package       Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId     String    @map("package_id")
+  
+  // Version is optional since some docs apply to multiple versions
+  version       PackageVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  versionId     String?   @map("version_id")
+  
+  document      Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId    String    @map("document_id")
+  
+  // Source information (moved from DocumentationSource model)
+  sourceName    String    @map("source_name") // Name of documentation source (e.g., "MDN", "Official Docs")
+  sourceUrl     String?   @map("source_url") // Base URL of the documentation source
+  sourceReliability Float @default(0.8) @map("source_reliability") // How reliable is this source (0-1)
+  sourceIsOfficial Boolean @default(false) @map("source_is_official") // Whether this is the official documentation
+  
+  // Ranking information
+  relevanceScore Float    @default(0.5) @map("relevance_score") // How relevant is this doc to the package (0-1)
+  isApiDoc      Boolean   @default(false) @map("is_api_doc") // Is this API documentation
+  isGuide       Boolean   @default(false) @map("is_guide") // Is this a guide or tutorial
+  isHomepage    Boolean   @default(false) @map("is_homepage") // Is this the package homepage
+  
+  // Timestamps
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  
+  @@unique([packageId, documentId])
+  @@index([relevanceScore])
+  @@index([sourceName])
+  @@index([sourceIsOfficial])
+  @@map("package_documentation_mappings")
+}
+
+// Cache for frequently requested documentation lookups
+model DocumentationCache {
+  id            String    @id @default(uuid())
+  key           String    @unique // Cache key (usually package or package+version)
+  data          Json      // Cached data (document IDs and metadata)
+  expiresAt     DateTime  @map("expires_at") // When this cache entry expires
+  
+  // Timestamps
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  
+  @@index([key])
+  @@index([expiresAt])
+  @@map("documentation_cache")
 }
