@@ -2,6 +2,11 @@ import { getPrismaClient as getMainPrismaClient } from '../config/database';
 import { PrismaClient, Prisma } from '../generated/prisma';
 import logger from '../utils/logger';
 
+// Define input type for creation, adding jobId
+interface CreateDocumentInput extends Omit<Prisma.DocumentCreateInput, 'id' | 'createdAt' | 'updatedAt' | 'job'> {
+  jobId?: string; // Add optional jobId
+}
+
 export class DocumentService {
   private prisma: PrismaClient;
 
@@ -12,10 +17,19 @@ export class DocumentService {
   /**
    * Create a new document
    */
-  async createDocument(data: Omit<Prisma.DocumentCreateInput, 'id' | 'createdAt' | 'updatedAt'>) {
+  async createDocument(data: CreateDocumentInput) {
     try {
+      // Separate jobId from the rest of the data
+      const { jobId, ...restData } = data;
+      
+      const createData: Prisma.DocumentCreateInput = {
+        ...restData,
+        // Connect to job if jobId is provided
+        ...(jobId && { job: { connect: { id: jobId } } }),
+      };
+      
       const document = await this.prisma.document.create({
-        data,
+        data: createData,
         include: {
           chunks: true,
         },

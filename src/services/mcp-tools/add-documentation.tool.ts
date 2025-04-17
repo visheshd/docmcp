@@ -101,7 +101,7 @@ export async function startCrawlingProcess(jobId: string, params: AddDocumentati
     logger.info(`Starting crawl process for job ${jobId} at URL ${params.url}`);
     
     // Start crawling with the provided options
-    await crawlerService.crawl(params.url, {
+    await crawlerService.crawl(jobId, params.url, {
       maxDepth: params.maxDepth || 3,
       rateLimit: params.rateLimit,
       respectRobotsTxt: params.respectRobotsTxt !== false, // Default to true if not specified
@@ -112,18 +112,13 @@ export async function startCrawlingProcess(jobId: string, params: AddDocumentati
     await jobService.updateJobMetadata(jobId, { stage: 'processing' });
     logger.info(`Crawling completed for job ${jobId}, starting document processing`);
     
-    // Get all documents created by the crawler starting from the base URL
-    // Extract base URL to find all related documents
-    const baseUrl = new URL(params.url).origin + new URL(params.url).pathname;
-    
+    // Get all documents created by this specific job
     const documents = await prisma.document.findMany({
       where: {
-        url: { startsWith: baseUrl } // Find all docs starting with the base path
-        // Potential improvement: Add a jobId to documents and filter by that
+        jobId: jobId // Filter by jobId
       }
     });
     
-    // const documents = await documentService.findDocumentsByUrl(params.url); // Old method
     logger.info(`Found ${documents.length} documents to process for job ${jobId}`);
     
     // Process each document (convert HTML to markdown, chunk, create embeddings)
@@ -167,14 +162,15 @@ export async function startCrawlingProcess(jobId: string, params: AddDocumentati
       }
     }
     
-    // Get the actual number of chunks created
-    const stats = await prisma.$queryRaw<[{ count: number }]>`
+    // Get the actual number of chunks created by this job
+    const stats = await prisma.$queryRaw<[{ count: BigInt }]>`
       SELECT COUNT(*) as count FROM chunks c
       INNER JOIN documents d ON d.id = c.document_id
-      WHERE d.url = ${params.url}
+      WHERE d.job_id = ${jobId}
     `;
     
-    const chunkCount = stats[0]?.count || processedDocs;
+    // Convert BigInt to Number for stats
+    const chunkCount = stats[0]?.count ? Number(stats[0].count) : processedDocs;
     
     // Mark job as completed
     await jobService.updateJobProgress(jobId, 'completed', 1.0);

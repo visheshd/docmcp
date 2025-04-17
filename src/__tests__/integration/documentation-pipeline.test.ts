@@ -128,7 +128,7 @@ describe('Documentation Processing Pipeline Integration', () => {
     // Check that documents were created
     const documentService = new DocumentService(prisma);
     const documents = await prisma.document.findMany({
-      where: { url: { startsWith: 'https://example.com/docs' } },
+      where: { jobId: jobId },
       orderBy: { url: 'asc' },
     });
     

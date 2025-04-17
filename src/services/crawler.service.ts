@@ -43,7 +43,7 @@ export class CrawlerService {
   /**
    * Initialize a crawl job for a documentation site
    */
-  async crawl(startUrl: string, options: Partial<CrawlOptions> = {}) {
+  async crawl(jobId: string, startUrl: string, options: Partial<CrawlOptions> = {}) {
     const defaultOptions: CrawlOptions = {
       maxDepth: 3,
       baseUrl: new URL(startUrl).origin,
@@ -59,16 +59,6 @@ export class CrawlerService {
     if (crawlOptions.respectRobotsTxt) {
       await this.loadRobotsTxt(crawlOptions.baseUrl);
     }
-
-    // Create job record before try block
-    const job = await this.prisma.job.create({
-      data: {
-        url: startUrl,
-        status: 'running',
-        startDate: new Date(),
-        stats: { pagesProcessed: 0, pagesSkipped: 0, totalChunks: 0 },
-      },
-    });
 
     try {
       while (this.urlQueue.length > 0) {
@@ -92,7 +82,7 @@ export class CrawlerService {
           const result = await this.crawlPage(url, depth, crawlOptions);
           this.visitedUrls.add(url);
 
-          // Create document record
+          // Create document record, including the jobId
           await this.documentService.createDocument({
             url: result.url,
             title: result.title,
@@ -100,6 +90,7 @@ export class CrawlerService {
             metadata: result.metadata,
             crawlDate: new Date(),
             level: result.level,
+            jobId: jobId,
           });
 
           // Queue new URLs
@@ -111,7 +102,7 @@ export class CrawlerService {
 
           // Update job progress
           await this.prisma.job.update({
-            where: { id: job.id },
+            where: { id: jobId },
             data: {
               progress: this.visitedUrls.size / (this.visitedUrls.size + this.urlQueue.length),
               stats: {
@@ -130,7 +121,7 @@ export class CrawlerService {
           logger.error(`Error crawling ${url}:`, error);
           // Update job with error but continue crawling
           await this.prisma.job.update({
-            where: { id: job.id },
+            where: { id: jobId },
             data: {
               error: `Error crawling ${url}: ${error}`,
               progress: this.visitedUrls.size / (this.visitedUrls.size + this.urlQueue.length),
@@ -158,21 +149,21 @@ export class CrawlerService {
       throw error; 
     } finally {
       // Ensure the job is always marked as completed
-      logger.info(`Crawl finished for job ${job.id}. Updating status.`);
+      logger.info(`Crawl finished for job ${jobId}. Updating status.`);
       try {
         await this.prisma.job.update({
-          where: { id: job.id },
+          where: { id: jobId },
           data: {
             status: 'completed', 
             endDate: new Date(),
             // Ensure progress is 1 if successful, otherwise keep last calculated progress
-            progress: (await this.prisma.job.findUnique({ where: { id: job.id }, select: { error: true } }))?.error ? 
+            progress: (await this.prisma.job.findUnique({ where: { id: jobId }, select: { error: true } }))?.error ? 
                       this.visitedUrls.size / (this.visitedUrls.size + this.urlQueue.length) : 1,
           },
         });
-        logger.info(`Job ${job.id} status updated to completed.`);
+        logger.info(`Job ${jobId} status updated to completed.`);
       } catch (updateError) {
-        logger.error(`Failed to update final job status for job ${job.id}:`, updateError);
+        logger.error(`Failed to update final job status for job ${jobId}:`, updateError);
       }
     }
   }
