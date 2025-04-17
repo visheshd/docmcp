@@ -1103,6 +1103,37 @@ export namespace Prisma {
 
 
   /**
+   * Count Type JobCountOutputType
+   */
+
+  export type JobCountOutputType = {
+    documents: number
+  }
+
+  export type JobCountOutputTypeSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    documents?: boolean | JobCountOutputTypeCountDocumentsArgs
+  }
+
+  // Custom InputTypes
+  /**
+   * JobCountOutputType without action
+   */
+  export type JobCountOutputTypeDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the JobCountOutputType
+     */
+    select?: JobCountOutputTypeSelect<ExtArgs> | null
+  }
+
+  /**
+   * JobCountOutputType without action
+   */
+  export type JobCountOutputTypeCountDocumentsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: DocumentWhereInput
+  }
+
+
+  /**
    * Models
    */
 
@@ -1134,6 +1165,7 @@ export namespace Prisma {
     crawlDate: Date | null
     level: number | null
     parentDocumentId: string | null
+    jobId: string | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -1146,6 +1178,7 @@ export namespace Prisma {
     crawlDate: Date | null
     level: number | null
     parentDocumentId: string | null
+    jobId: string | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -1159,6 +1192,7 @@ export namespace Prisma {
     crawlDate: number
     level: number
     parentDocumentId: number
+    jobId: number
     createdAt: number
     updatedAt: number
     _all: number
@@ -1181,6 +1215,7 @@ export namespace Prisma {
     crawlDate?: true
     level?: true
     parentDocumentId?: true
+    jobId?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -1193,6 +1228,7 @@ export namespace Prisma {
     crawlDate?: true
     level?: true
     parentDocumentId?: true
+    jobId?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -1206,6 +1242,7 @@ export namespace Prisma {
     crawlDate?: true
     level?: true
     parentDocumentId?: true
+    jobId?: true
     createdAt?: true
     updatedAt?: true
     _all?: true
@@ -1306,6 +1343,7 @@ export namespace Prisma {
     crawlDate: Date
     level: number
     parentDocumentId: string | null
+    jobId: string | null
     createdAt: Date
     updatedAt: Date
     _count: DocumentCountAggregateOutputType | null
@@ -1338,11 +1376,13 @@ export namespace Prisma {
     crawlDate?: boolean
     level?: boolean
     parentDocumentId?: boolean
+    jobId?: boolean
     createdAt?: boolean
     updatedAt?: boolean
     parentDocument?: boolean | Document$parentDocumentArgs<ExtArgs>
     childDocuments?: boolean | Document$childDocumentsArgs<ExtArgs>
     chunks?: boolean | Document$chunksArgs<ExtArgs>
+    job?: boolean | Document$jobArgs<ExtArgs>
     _count?: boolean | DocumentCountOutputTypeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["document"]>
 
@@ -1355,9 +1395,11 @@ export namespace Prisma {
     crawlDate?: boolean
     level?: boolean
     parentDocumentId?: boolean
+    jobId?: boolean
     createdAt?: boolean
     updatedAt?: boolean
     parentDocument?: boolean | Document$parentDocumentArgs<ExtArgs>
+    job?: boolean | Document$jobArgs<ExtArgs>
   }, ExtArgs["result"]["document"]>
 
   export type DocumentSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -1369,9 +1411,11 @@ export namespace Prisma {
     crawlDate?: boolean
     level?: boolean
     parentDocumentId?: boolean
+    jobId?: boolean
     createdAt?: boolean
     updatedAt?: boolean
     parentDocument?: boolean | Document$parentDocumentArgs<ExtArgs>
+    job?: boolean | Document$jobArgs<ExtArgs>
   }, ExtArgs["result"]["document"]>
 
   export type DocumentSelectScalar = {
@@ -1383,22 +1427,26 @@ export namespace Prisma {
     crawlDate?: boolean
     level?: boolean
     parentDocumentId?: boolean
+    jobId?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type DocumentOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "url" | "title" | "content" | "metadata" | "crawlDate" | "level" | "parentDocumentId" | "createdAt" | "updatedAt", ExtArgs["result"]["document"]>
+  export type DocumentOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "url" | "title" | "content" | "metadata" | "crawlDate" | "level" | "parentDocumentId" | "jobId" | "createdAt" | "updatedAt", ExtArgs["result"]["document"]>
   export type DocumentInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     parentDocument?: boolean | Document$parentDocumentArgs<ExtArgs>
     childDocuments?: boolean | Document$childDocumentsArgs<ExtArgs>
     chunks?: boolean | Document$chunksArgs<ExtArgs>
+    job?: boolean | Document$jobArgs<ExtArgs>
     _count?: boolean | DocumentCountOutputTypeDefaultArgs<ExtArgs>
   }
   export type DocumentIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     parentDocument?: boolean | Document$parentDocumentArgs<ExtArgs>
+    job?: boolean | Document$jobArgs<ExtArgs>
   }
   export type DocumentIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     parentDocument?: boolean | Document$parentDocumentArgs<ExtArgs>
+    job?: boolean | Document$jobArgs<ExtArgs>
   }
 
   export type $DocumentPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -1407,6 +1455,7 @@ export namespace Prisma {
       parentDocument: Prisma.$DocumentPayload<ExtArgs> | null
       childDocuments: Prisma.$DocumentPayload<ExtArgs>[]
       chunks: Prisma.$ChunkPayload<ExtArgs>[]
+      job: Prisma.$JobPayload<ExtArgs> | null
     }
     scalars: $Extensions.GetPayloadResult<{
       id: string
@@ -1417,6 +1466,7 @@ export namespace Prisma {
       crawlDate: Date
       level: number
       parentDocumentId: string | null
+      jobId: string | null
       createdAt: Date
       updatedAt: Date
     }, ExtArgs["result"]["document"]>
@@ -1816,6 +1866,7 @@ export namespace Prisma {
     parentDocument<T extends Document$parentDocumentArgs<ExtArgs> = {}>(args?: Subset<T, Document$parentDocumentArgs<ExtArgs>>): Prisma__DocumentClient<$Result.GetResult<Prisma.$DocumentPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
     childDocuments<T extends Document$childDocumentsArgs<ExtArgs> = {}>(args?: Subset<T, Document$childDocumentsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$DocumentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     chunks<T extends Document$chunksArgs<ExtArgs> = {}>(args?: Subset<T, Document$chunksArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ChunkPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    job<T extends Document$jobArgs<ExtArgs> = {}>(args?: Subset<T, Document$jobArgs<ExtArgs>>): Prisma__JobClient<$Result.GetResult<Prisma.$JobPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1853,6 +1904,7 @@ export namespace Prisma {
     readonly crawlDate: FieldRef<"Document", 'DateTime'>
     readonly level: FieldRef<"Document", 'Int'>
     readonly parentDocumentId: FieldRef<"Document", 'String'>
+    readonly jobId: FieldRef<"Document", 'String'>
     readonly createdAt: FieldRef<"Document", 'DateTime'>
     readonly updatedAt: FieldRef<"Document", 'DateTime'>
   }
@@ -2315,6 +2367,25 @@ export namespace Prisma {
     take?: number
     skip?: number
     distinct?: ChunkScalarFieldEnum | ChunkScalarFieldEnum[]
+  }
+
+  /**
+   * Document.job
+   */
+  export type Document$jobArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Job
+     */
+    select?: JobSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Job
+     */
+    omit?: JobOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: JobInclude<ExtArgs> | null
+    where?: JobWhereInput
   }
 
   /**
@@ -3504,6 +3575,8 @@ export namespace Prisma {
     metadata?: boolean
     createdAt?: boolean
     updatedAt?: boolean
+    documents?: boolean | Job$documentsArgs<ExtArgs>
+    _count?: boolean | JobCountOutputTypeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["job"]>
 
   export type JobSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -3561,10 +3634,18 @@ export namespace Prisma {
   }
 
   export type JobOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "url" | "status" | "type" | "progress" | "startDate" | "endDate" | "error" | "stats" | "name" | "maxDepth" | "tags" | "metadata" | "createdAt" | "updatedAt", ExtArgs["result"]["job"]>
+  export type JobInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    documents?: boolean | Job$documentsArgs<ExtArgs>
+    _count?: boolean | JobCountOutputTypeDefaultArgs<ExtArgs>
+  }
+  export type JobIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {}
+  export type JobIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {}
 
   export type $JobPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "Job"
-    objects: {}
+    objects: {
+      documents: Prisma.$DocumentPayload<ExtArgs>[]
+    }
     scalars: $Extensions.GetPayloadResult<{
       id: string
       url: string
@@ -3975,6 +4056,7 @@ export namespace Prisma {
    */
   export interface Prisma__JobClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise"
+    documents<T extends Job$documentsArgs<ExtArgs> = {}>(args?: Subset<T, Job$documentsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$DocumentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -4036,6 +4118,10 @@ export namespace Prisma {
      */
     omit?: JobOmit<ExtArgs> | null
     /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: JobInclude<ExtArgs> | null
+    /**
      * Filter, which Job to fetch.
      */
     where: JobWhereUniqueInput
@@ -4054,6 +4140,10 @@ export namespace Prisma {
      */
     omit?: JobOmit<ExtArgs> | null
     /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: JobInclude<ExtArgs> | null
+    /**
      * Filter, which Job to fetch.
      */
     where: JobWhereUniqueInput
@@ -4071,6 +4161,10 @@ export namespace Prisma {
      * Omit specific fields from the Job
      */
     omit?: JobOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: JobInclude<ExtArgs> | null
     /**
      * Filter, which Job to fetch.
      */
@@ -4120,6 +4214,10 @@ export namespace Prisma {
      */
     omit?: JobOmit<ExtArgs> | null
     /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: JobInclude<ExtArgs> | null
+    /**
      * Filter, which Job to fetch.
      */
     where?: JobWhereInput
@@ -4168,6 +4266,10 @@ export namespace Prisma {
      */
     omit?: JobOmit<ExtArgs> | null
     /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: JobInclude<ExtArgs> | null
+    /**
      * Filter, which Jobs to fetch.
      */
     where?: JobWhereInput
@@ -4210,6 +4312,10 @@ export namespace Prisma {
      * Omit specific fields from the Job
      */
     omit?: JobOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: JobInclude<ExtArgs> | null
     /**
      * The data needed to create a Job.
      */
@@ -4258,6 +4364,10 @@ export namespace Prisma {
      * Omit specific fields from the Job
      */
     omit?: JobOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: JobInclude<ExtArgs> | null
     /**
      * The data needed to update a Job.
      */
@@ -4325,6 +4435,10 @@ export namespace Prisma {
      */
     omit?: JobOmit<ExtArgs> | null
     /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: JobInclude<ExtArgs> | null
+    /**
      * The filter to search for the Job to update in case it exists.
      */
     where: JobWhereUniqueInput
@@ -4351,6 +4465,10 @@ export namespace Prisma {
      */
     omit?: JobOmit<ExtArgs> | null
     /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: JobInclude<ExtArgs> | null
+    /**
      * Filter which Job to delete.
      */
     where: JobWhereUniqueInput
@@ -4371,6 +4489,30 @@ export namespace Prisma {
   }
 
   /**
+   * Job.documents
+   */
+  export type Job$documentsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Document
+     */
+    select?: DocumentSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Document
+     */
+    omit?: DocumentOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: DocumentInclude<ExtArgs> | null
+    where?: DocumentWhereInput
+    orderBy?: DocumentOrderByWithRelationInput | DocumentOrderByWithRelationInput[]
+    cursor?: DocumentWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: DocumentScalarFieldEnum | DocumentScalarFieldEnum[]
+  }
+
+  /**
    * Job without action
    */
   export type JobDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -4382,6 +4524,10 @@ export namespace Prisma {
      * Omit specific fields from the Job
      */
     omit?: JobOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: JobInclude<ExtArgs> | null
   }
 
 
@@ -4408,6 +4554,7 @@ export namespace Prisma {
     crawlDate: 'crawlDate',
     level: 'level',
     parentDocumentId: 'parentDocumentId',
+    jobId: 'jobId',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   };
@@ -4614,11 +4761,13 @@ export namespace Prisma {
     crawlDate?: DateTimeFilter<"Document"> | Date | string
     level?: IntFilter<"Document"> | number
     parentDocumentId?: StringNullableFilter<"Document"> | string | null
+    jobId?: StringNullableFilter<"Document"> | string | null
     createdAt?: DateTimeFilter<"Document"> | Date | string
     updatedAt?: DateTimeFilter<"Document"> | Date | string
     parentDocument?: XOR<DocumentNullableScalarRelationFilter, DocumentWhereInput> | null
     childDocuments?: DocumentListRelationFilter
     chunks?: ChunkListRelationFilter
+    job?: XOR<JobNullableScalarRelationFilter, JobWhereInput> | null
   }
 
   export type DocumentOrderByWithRelationInput = {
@@ -4630,11 +4779,13 @@ export namespace Prisma {
     crawlDate?: SortOrder
     level?: SortOrder
     parentDocumentId?: SortOrderInput | SortOrder
+    jobId?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     parentDocument?: DocumentOrderByWithRelationInput
     childDocuments?: DocumentOrderByRelationAggregateInput
     chunks?: ChunkOrderByRelationAggregateInput
+    job?: JobOrderByWithRelationInput
   }
 
   export type DocumentWhereUniqueInput = Prisma.AtLeast<{
@@ -4649,11 +4800,13 @@ export namespace Prisma {
     crawlDate?: DateTimeFilter<"Document"> | Date | string
     level?: IntFilter<"Document"> | number
     parentDocumentId?: StringNullableFilter<"Document"> | string | null
+    jobId?: StringNullableFilter<"Document"> | string | null
     createdAt?: DateTimeFilter<"Document"> | Date | string
     updatedAt?: DateTimeFilter<"Document"> | Date | string
     parentDocument?: XOR<DocumentNullableScalarRelationFilter, DocumentWhereInput> | null
     childDocuments?: DocumentListRelationFilter
     chunks?: ChunkListRelationFilter
+    job?: XOR<JobNullableScalarRelationFilter, JobWhereInput> | null
   }, "id">
 
   export type DocumentOrderByWithAggregationInput = {
@@ -4665,6 +4818,7 @@ export namespace Prisma {
     crawlDate?: SortOrder
     level?: SortOrder
     parentDocumentId?: SortOrderInput | SortOrder
+    jobId?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: DocumentCountOrderByAggregateInput
@@ -4686,6 +4840,7 @@ export namespace Prisma {
     crawlDate?: DateTimeWithAggregatesFilter<"Document"> | Date | string
     level?: IntWithAggregatesFilter<"Document"> | number
     parentDocumentId?: StringNullableWithAggregatesFilter<"Document"> | string | null
+    jobId?: StringNullableWithAggregatesFilter<"Document"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"Document"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Document"> | Date | string
   }
@@ -4769,6 +4924,7 @@ export namespace Prisma {
     metadata?: JsonNullableFilter<"Job">
     createdAt?: DateTimeFilter<"Job"> | Date | string
     updatedAt?: DateTimeFilter<"Job"> | Date | string
+    documents?: DocumentListRelationFilter
   }
 
   export type JobOrderByWithRelationInput = {
@@ -4787,6 +4943,7 @@ export namespace Prisma {
     metadata?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+    documents?: DocumentOrderByRelationAggregateInput
   }
 
   export type JobWhereUniqueInput = Prisma.AtLeast<{
@@ -4808,6 +4965,7 @@ export namespace Prisma {
     metadata?: JsonNullableFilter<"Job">
     createdAt?: DateTimeFilter<"Job"> | Date | string
     updatedAt?: DateTimeFilter<"Job"> | Date | string
+    documents?: DocumentListRelationFilter
   }, "id">
 
   export type JobOrderByWithAggregationInput = {
@@ -4867,6 +5025,7 @@ export namespace Prisma {
     parentDocument?: DocumentCreateNestedOneWithoutChildDocumentsInput
     childDocuments?: DocumentCreateNestedManyWithoutParentDocumentInput
     chunks?: ChunkCreateNestedManyWithoutDocumentInput
+    job?: JobCreateNestedOneWithoutDocumentsInput
   }
 
   export type DocumentUncheckedCreateInput = {
@@ -4878,6 +5037,7 @@ export namespace Prisma {
     crawlDate: Date | string
     level: number
     parentDocumentId?: string | null
+    jobId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     childDocuments?: DocumentUncheckedCreateNestedManyWithoutParentDocumentInput
@@ -4897,6 +5057,7 @@ export namespace Prisma {
     parentDocument?: DocumentUpdateOneWithoutChildDocumentsNestedInput
     childDocuments?: DocumentUpdateManyWithoutParentDocumentNestedInput
     chunks?: ChunkUpdateManyWithoutDocumentNestedInput
+    job?: JobUpdateOneWithoutDocumentsNestedInput
   }
 
   export type DocumentUncheckedUpdateInput = {
@@ -4908,6 +5069,7 @@ export namespace Prisma {
     crawlDate?: DateTimeFieldUpdateOperationsInput | Date | string
     level?: IntFieldUpdateOperationsInput | number
     parentDocumentId?: NullableStringFieldUpdateOperationsInput | string | null
+    jobId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     childDocuments?: DocumentUncheckedUpdateManyWithoutParentDocumentNestedInput
@@ -4923,6 +5085,7 @@ export namespace Prisma {
     crawlDate: Date | string
     level: number
     parentDocumentId?: string | null
+    jobId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -4948,6 +5111,7 @@ export namespace Prisma {
     crawlDate?: DateTimeFieldUpdateOperationsInput | Date | string
     level?: IntFieldUpdateOperationsInput | number
     parentDocumentId?: NullableStringFieldUpdateOperationsInput | string | null
+    jobId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -5003,6 +5167,7 @@ export namespace Prisma {
     metadata?: NullableJsonNullValueInput | InputJsonValue
     createdAt?: Date | string
     updatedAt?: Date | string
+    documents?: DocumentCreateNestedManyWithoutJobInput
   }
 
   export type JobUncheckedCreateInput = {
@@ -5021,6 +5186,7 @@ export namespace Prisma {
     metadata?: NullableJsonNullValueInput | InputJsonValue
     createdAt?: Date | string
     updatedAt?: Date | string
+    documents?: DocumentUncheckedCreateNestedManyWithoutJobInput
   }
 
   export type JobUpdateInput = {
@@ -5039,6 +5205,7 @@ export namespace Prisma {
     metadata?: NullableJsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    documents?: DocumentUpdateManyWithoutJobNestedInput
   }
 
   export type JobUncheckedUpdateInput = {
@@ -5057,6 +5224,7 @@ export namespace Prisma {
     metadata?: NullableJsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    documents?: DocumentUncheckedUpdateManyWithoutJobNestedInput
   }
 
   export type JobCreateManyInput = {
@@ -5205,6 +5373,11 @@ export namespace Prisma {
     none?: ChunkWhereInput
   }
 
+  export type JobNullableScalarRelationFilter = {
+    is?: JobWhereInput | null
+    isNot?: JobWhereInput | null
+  }
+
   export type SortOrderInput = {
     sort: SortOrder
     nulls?: NullsOrder
@@ -5227,6 +5400,7 @@ export namespace Prisma {
     crawlDate?: SortOrder
     level?: SortOrder
     parentDocumentId?: SortOrder
+    jobId?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -5243,6 +5417,7 @@ export namespace Prisma {
     crawlDate?: SortOrder
     level?: SortOrder
     parentDocumentId?: SortOrder
+    jobId?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -5255,6 +5430,7 @@ export namespace Prisma {
     crawlDate?: SortOrder
     level?: SortOrder
     parentDocumentId?: SortOrder
+    jobId?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -5630,6 +5806,12 @@ export namespace Prisma {
     connect?: ChunkWhereUniqueInput | ChunkWhereUniqueInput[]
   }
 
+  export type JobCreateNestedOneWithoutDocumentsInput = {
+    create?: XOR<JobCreateWithoutDocumentsInput, JobUncheckedCreateWithoutDocumentsInput>
+    connectOrCreate?: JobCreateOrConnectWithoutDocumentsInput
+    connect?: JobWhereUniqueInput
+  }
+
   export type DocumentUncheckedCreateNestedManyWithoutParentDocumentInput = {
     create?: XOR<DocumentCreateWithoutParentDocumentInput, DocumentUncheckedCreateWithoutParentDocumentInput> | DocumentCreateWithoutParentDocumentInput[] | DocumentUncheckedCreateWithoutParentDocumentInput[]
     connectOrCreate?: DocumentCreateOrConnectWithoutParentDocumentInput | DocumentCreateOrConnectWithoutParentDocumentInput[]
@@ -5691,6 +5873,16 @@ export namespace Prisma {
     deleteMany?: ChunkScalarWhereInput | ChunkScalarWhereInput[]
   }
 
+  export type JobUpdateOneWithoutDocumentsNestedInput = {
+    create?: XOR<JobCreateWithoutDocumentsInput, JobUncheckedCreateWithoutDocumentsInput>
+    connectOrCreate?: JobCreateOrConnectWithoutDocumentsInput
+    upsert?: JobUpsertWithoutDocumentsInput
+    disconnect?: JobWhereInput | boolean
+    delete?: JobWhereInput | boolean
+    connect?: JobWhereUniqueInput
+    update?: XOR<XOR<JobUpdateToOneWithWhereWithoutDocumentsInput, JobUpdateWithoutDocumentsInput>, JobUncheckedUpdateWithoutDocumentsInput>
+  }
+
   export type NullableStringFieldUpdateOperationsInput = {
     set?: string | null
   }
@@ -5731,6 +5923,20 @@ export namespace Prisma {
     set: string[]
   }
 
+  export type DocumentCreateNestedManyWithoutJobInput = {
+    create?: XOR<DocumentCreateWithoutJobInput, DocumentUncheckedCreateWithoutJobInput> | DocumentCreateWithoutJobInput[] | DocumentUncheckedCreateWithoutJobInput[]
+    connectOrCreate?: DocumentCreateOrConnectWithoutJobInput | DocumentCreateOrConnectWithoutJobInput[]
+    createMany?: DocumentCreateManyJobInputEnvelope
+    connect?: DocumentWhereUniqueInput | DocumentWhereUniqueInput[]
+  }
+
+  export type DocumentUncheckedCreateNestedManyWithoutJobInput = {
+    create?: XOR<DocumentCreateWithoutJobInput, DocumentUncheckedCreateWithoutJobInput> | DocumentCreateWithoutJobInput[] | DocumentUncheckedCreateWithoutJobInput[]
+    connectOrCreate?: DocumentCreateOrConnectWithoutJobInput | DocumentCreateOrConnectWithoutJobInput[]
+    createMany?: DocumentCreateManyJobInputEnvelope
+    connect?: DocumentWhereUniqueInput | DocumentWhereUniqueInput[]
+  }
+
   export type EnumJobStatusFieldUpdateOperationsInput = {
     set?: $Enums.JobStatus
   }
@@ -5762,6 +5968,34 @@ export namespace Prisma {
   export type JobUpdatetagsInput = {
     set?: string[]
     push?: string | string[]
+  }
+
+  export type DocumentUpdateManyWithoutJobNestedInput = {
+    create?: XOR<DocumentCreateWithoutJobInput, DocumentUncheckedCreateWithoutJobInput> | DocumentCreateWithoutJobInput[] | DocumentUncheckedCreateWithoutJobInput[]
+    connectOrCreate?: DocumentCreateOrConnectWithoutJobInput | DocumentCreateOrConnectWithoutJobInput[]
+    upsert?: DocumentUpsertWithWhereUniqueWithoutJobInput | DocumentUpsertWithWhereUniqueWithoutJobInput[]
+    createMany?: DocumentCreateManyJobInputEnvelope
+    set?: DocumentWhereUniqueInput | DocumentWhereUniqueInput[]
+    disconnect?: DocumentWhereUniqueInput | DocumentWhereUniqueInput[]
+    delete?: DocumentWhereUniqueInput | DocumentWhereUniqueInput[]
+    connect?: DocumentWhereUniqueInput | DocumentWhereUniqueInput[]
+    update?: DocumentUpdateWithWhereUniqueWithoutJobInput | DocumentUpdateWithWhereUniqueWithoutJobInput[]
+    updateMany?: DocumentUpdateManyWithWhereWithoutJobInput | DocumentUpdateManyWithWhereWithoutJobInput[]
+    deleteMany?: DocumentScalarWhereInput | DocumentScalarWhereInput[]
+  }
+
+  export type DocumentUncheckedUpdateManyWithoutJobNestedInput = {
+    create?: XOR<DocumentCreateWithoutJobInput, DocumentUncheckedCreateWithoutJobInput> | DocumentCreateWithoutJobInput[] | DocumentUncheckedCreateWithoutJobInput[]
+    connectOrCreate?: DocumentCreateOrConnectWithoutJobInput | DocumentCreateOrConnectWithoutJobInput[]
+    upsert?: DocumentUpsertWithWhereUniqueWithoutJobInput | DocumentUpsertWithWhereUniqueWithoutJobInput[]
+    createMany?: DocumentCreateManyJobInputEnvelope
+    set?: DocumentWhereUniqueInput | DocumentWhereUniqueInput[]
+    disconnect?: DocumentWhereUniqueInput | DocumentWhereUniqueInput[]
+    delete?: DocumentWhereUniqueInput | DocumentWhereUniqueInput[]
+    connect?: DocumentWhereUniqueInput | DocumentWhereUniqueInput[]
+    update?: DocumentUpdateWithWhereUniqueWithoutJobInput | DocumentUpdateWithWhereUniqueWithoutJobInput[]
+    updateMany?: DocumentUpdateManyWithWhereWithoutJobInput | DocumentUpdateManyWithWhereWithoutJobInput[]
+    deleteMany?: DocumentScalarWhereInput | DocumentScalarWhereInput[]
   }
 
   export type NestedStringFilter<$PrismaModel = never> = {
@@ -6060,6 +6294,7 @@ export namespace Prisma {
     updatedAt?: Date | string
     parentDocument?: DocumentCreateNestedOneWithoutChildDocumentsInput
     chunks?: ChunkCreateNestedManyWithoutDocumentInput
+    job?: JobCreateNestedOneWithoutDocumentsInput
   }
 
   export type DocumentUncheckedCreateWithoutChildDocumentsInput = {
@@ -6071,6 +6306,7 @@ export namespace Prisma {
     crawlDate: Date | string
     level: number
     parentDocumentId?: string | null
+    jobId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     chunks?: ChunkUncheckedCreateNestedManyWithoutDocumentInput
@@ -6093,6 +6329,7 @@ export namespace Prisma {
     updatedAt?: Date | string
     childDocuments?: DocumentCreateNestedManyWithoutParentDocumentInput
     chunks?: ChunkCreateNestedManyWithoutDocumentInput
+    job?: JobCreateNestedOneWithoutDocumentsInput
   }
 
   export type DocumentUncheckedCreateWithoutParentDocumentInput = {
@@ -6103,6 +6340,7 @@ export namespace Prisma {
     metadata: JsonNullValueInput | InputJsonValue
     crawlDate: Date | string
     level: number
+    jobId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     childDocuments?: DocumentUncheckedCreateNestedManyWithoutParentDocumentInput
@@ -6117,6 +6355,47 @@ export namespace Prisma {
   export type DocumentCreateManyParentDocumentInputEnvelope = {
     data: DocumentCreateManyParentDocumentInput | DocumentCreateManyParentDocumentInput[]
     skipDuplicates?: boolean
+  }
+
+  export type JobCreateWithoutDocumentsInput = {
+    id?: string
+    url: string
+    status?: $Enums.JobStatus
+    type?: $Enums.JobType
+    progress?: number
+    startDate: Date | string
+    endDate?: Date | string | null
+    error?: string | null
+    stats?: JsonNullValueInput | InputJsonValue
+    name?: string | null
+    maxDepth?: number | null
+    tags?: JobCreatetagsInput | string[]
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type JobUncheckedCreateWithoutDocumentsInput = {
+    id?: string
+    url: string
+    status?: $Enums.JobStatus
+    type?: $Enums.JobType
+    progress?: number
+    startDate: Date | string
+    endDate?: Date | string | null
+    error?: string | null
+    stats?: JsonNullValueInput | InputJsonValue
+    name?: string | null
+    maxDepth?: number | null
+    tags?: JobCreatetagsInput | string[]
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type JobCreateOrConnectWithoutDocumentsInput = {
+    where: JobWhereUniqueInput
+    create: XOR<JobCreateWithoutDocumentsInput, JobUncheckedCreateWithoutDocumentsInput>
   }
 
   export type DocumentUpsertWithoutChildDocumentsInput = {
@@ -6142,6 +6421,7 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     parentDocument?: DocumentUpdateOneWithoutChildDocumentsNestedInput
     chunks?: ChunkUpdateManyWithoutDocumentNestedInput
+    job?: JobUpdateOneWithoutDocumentsNestedInput
   }
 
   export type DocumentUncheckedUpdateWithoutChildDocumentsInput = {
@@ -6153,6 +6433,7 @@ export namespace Prisma {
     crawlDate?: DateTimeFieldUpdateOperationsInput | Date | string
     level?: IntFieldUpdateOperationsInput | number
     parentDocumentId?: NullableStringFieldUpdateOperationsInput | string | null
+    jobId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     chunks?: ChunkUncheckedUpdateManyWithoutDocumentNestedInput
@@ -6186,6 +6467,7 @@ export namespace Prisma {
     crawlDate?: DateTimeFilter<"Document"> | Date | string
     level?: IntFilter<"Document"> | number
     parentDocumentId?: StringNullableFilter<"Document"> | string | null
+    jobId?: StringNullableFilter<"Document"> | string | null
     createdAt?: DateTimeFilter<"Document"> | Date | string
     updatedAt?: DateTimeFilter<"Document"> | Date | string
   }
@@ -6212,6 +6494,53 @@ export namespace Prisma {
     updatedAt?: DateTimeFilter<"Chunk"> | Date | string
   }
 
+  export type JobUpsertWithoutDocumentsInput = {
+    update: XOR<JobUpdateWithoutDocumentsInput, JobUncheckedUpdateWithoutDocumentsInput>
+    create: XOR<JobCreateWithoutDocumentsInput, JobUncheckedCreateWithoutDocumentsInput>
+    where?: JobWhereInput
+  }
+
+  export type JobUpdateToOneWithWhereWithoutDocumentsInput = {
+    where?: JobWhereInput
+    data: XOR<JobUpdateWithoutDocumentsInput, JobUncheckedUpdateWithoutDocumentsInput>
+  }
+
+  export type JobUpdateWithoutDocumentsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    url?: StringFieldUpdateOperationsInput | string
+    status?: EnumJobStatusFieldUpdateOperationsInput | $Enums.JobStatus
+    type?: EnumJobTypeFieldUpdateOperationsInput | $Enums.JobType
+    progress?: FloatFieldUpdateOperationsInput | number
+    startDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    endDate?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    error?: NullableStringFieldUpdateOperationsInput | string | null
+    stats?: JsonNullValueInput | InputJsonValue
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    maxDepth?: NullableIntFieldUpdateOperationsInput | number | null
+    tags?: JobUpdatetagsInput | string[]
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type JobUncheckedUpdateWithoutDocumentsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    url?: StringFieldUpdateOperationsInput | string
+    status?: EnumJobStatusFieldUpdateOperationsInput | $Enums.JobStatus
+    type?: EnumJobTypeFieldUpdateOperationsInput | $Enums.JobType
+    progress?: FloatFieldUpdateOperationsInput | number
+    startDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    endDate?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    error?: NullableStringFieldUpdateOperationsInput | string | null
+    stats?: JsonNullValueInput | InputJsonValue
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    maxDepth?: NullableIntFieldUpdateOperationsInput | number | null
+    tags?: JobUpdatetagsInput | string[]
+    metadata?: NullableJsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
   export type DocumentCreateWithoutChunksInput = {
     id?: string
     url: string
@@ -6224,6 +6553,7 @@ export namespace Prisma {
     updatedAt?: Date | string
     parentDocument?: DocumentCreateNestedOneWithoutChildDocumentsInput
     childDocuments?: DocumentCreateNestedManyWithoutParentDocumentInput
+    job?: JobCreateNestedOneWithoutDocumentsInput
   }
 
   export type DocumentUncheckedCreateWithoutChunksInput = {
@@ -6235,6 +6565,7 @@ export namespace Prisma {
     crawlDate: Date | string
     level: number
     parentDocumentId?: string | null
+    jobId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     childDocuments?: DocumentUncheckedCreateNestedManyWithoutParentDocumentInput
@@ -6268,6 +6599,7 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     parentDocument?: DocumentUpdateOneWithoutChildDocumentsNestedInput
     childDocuments?: DocumentUpdateManyWithoutParentDocumentNestedInput
+    job?: JobUpdateOneWithoutDocumentsNestedInput
   }
 
   export type DocumentUncheckedUpdateWithoutChunksInput = {
@@ -6279,9 +6611,66 @@ export namespace Prisma {
     crawlDate?: DateTimeFieldUpdateOperationsInput | Date | string
     level?: IntFieldUpdateOperationsInput | number
     parentDocumentId?: NullableStringFieldUpdateOperationsInput | string | null
+    jobId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     childDocuments?: DocumentUncheckedUpdateManyWithoutParentDocumentNestedInput
+  }
+
+  export type DocumentCreateWithoutJobInput = {
+    id?: string
+    url: string
+    title: string
+    content: string
+    metadata: JsonNullValueInput | InputJsonValue
+    crawlDate: Date | string
+    level: number
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    parentDocument?: DocumentCreateNestedOneWithoutChildDocumentsInput
+    childDocuments?: DocumentCreateNestedManyWithoutParentDocumentInput
+    chunks?: ChunkCreateNestedManyWithoutDocumentInput
+  }
+
+  export type DocumentUncheckedCreateWithoutJobInput = {
+    id?: string
+    url: string
+    title: string
+    content: string
+    metadata: JsonNullValueInput | InputJsonValue
+    crawlDate: Date | string
+    level: number
+    parentDocumentId?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    childDocuments?: DocumentUncheckedCreateNestedManyWithoutParentDocumentInput
+    chunks?: ChunkUncheckedCreateNestedManyWithoutDocumentInput
+  }
+
+  export type DocumentCreateOrConnectWithoutJobInput = {
+    where: DocumentWhereUniqueInput
+    create: XOR<DocumentCreateWithoutJobInput, DocumentUncheckedCreateWithoutJobInput>
+  }
+
+  export type DocumentCreateManyJobInputEnvelope = {
+    data: DocumentCreateManyJobInput | DocumentCreateManyJobInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type DocumentUpsertWithWhereUniqueWithoutJobInput = {
+    where: DocumentWhereUniqueInput
+    update: XOR<DocumentUpdateWithoutJobInput, DocumentUncheckedUpdateWithoutJobInput>
+    create: XOR<DocumentCreateWithoutJobInput, DocumentUncheckedCreateWithoutJobInput>
+  }
+
+  export type DocumentUpdateWithWhereUniqueWithoutJobInput = {
+    where: DocumentWhereUniqueInput
+    data: XOR<DocumentUpdateWithoutJobInput, DocumentUncheckedUpdateWithoutJobInput>
+  }
+
+  export type DocumentUpdateManyWithWhereWithoutJobInput = {
+    where: DocumentScalarWhereInput
+    data: XOR<DocumentUpdateManyMutationInput, DocumentUncheckedUpdateManyWithoutJobInput>
   }
 
   export type DocumentCreateManyParentDocumentInput = {
@@ -6292,6 +6681,7 @@ export namespace Prisma {
     metadata: JsonNullValueInput | InputJsonValue
     crawlDate: Date | string
     level: number
+    jobId?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -6308,6 +6698,7 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     childDocuments?: DocumentUpdateManyWithoutParentDocumentNestedInput
     chunks?: ChunkUpdateManyWithoutDocumentNestedInput
+    job?: JobUpdateOneWithoutDocumentsNestedInput
   }
 
   export type DocumentUncheckedUpdateWithoutParentDocumentInput = {
@@ -6318,6 +6709,7 @@ export namespace Prisma {
     metadata?: JsonNullValueInput | InputJsonValue
     crawlDate?: DateTimeFieldUpdateOperationsInput | Date | string
     level?: IntFieldUpdateOperationsInput | number
+    jobId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     childDocuments?: DocumentUncheckedUpdateManyWithoutParentDocumentNestedInput
@@ -6332,6 +6724,7 @@ export namespace Prisma {
     metadata?: JsonNullValueInput | InputJsonValue
     crawlDate?: DateTimeFieldUpdateOperationsInput | Date | string
     level?: IntFieldUpdateOperationsInput | number
+    jobId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -6356,6 +6749,62 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     content?: StringFieldUpdateOperationsInput | string
     metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type DocumentCreateManyJobInput = {
+    id?: string
+    url: string
+    title: string
+    content: string
+    metadata: JsonNullValueInput | InputJsonValue
+    crawlDate: Date | string
+    level: number
+    parentDocumentId?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type DocumentUpdateWithoutJobInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    url?: StringFieldUpdateOperationsInput | string
+    title?: StringFieldUpdateOperationsInput | string
+    content?: StringFieldUpdateOperationsInput | string
+    metadata?: JsonNullValueInput | InputJsonValue
+    crawlDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    level?: IntFieldUpdateOperationsInput | number
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    parentDocument?: DocumentUpdateOneWithoutChildDocumentsNestedInput
+    childDocuments?: DocumentUpdateManyWithoutParentDocumentNestedInput
+    chunks?: ChunkUpdateManyWithoutDocumentNestedInput
+  }
+
+  export type DocumentUncheckedUpdateWithoutJobInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    url?: StringFieldUpdateOperationsInput | string
+    title?: StringFieldUpdateOperationsInput | string
+    content?: StringFieldUpdateOperationsInput | string
+    metadata?: JsonNullValueInput | InputJsonValue
+    crawlDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    level?: IntFieldUpdateOperationsInput | number
+    parentDocumentId?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    childDocuments?: DocumentUncheckedUpdateManyWithoutParentDocumentNestedInput
+    chunks?: ChunkUncheckedUpdateManyWithoutDocumentNestedInput
+  }
+
+  export type DocumentUncheckedUpdateManyWithoutJobInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    url?: StringFieldUpdateOperationsInput | string
+    title?: StringFieldUpdateOperationsInput | string
+    content?: StringFieldUpdateOperationsInput | string
+    metadata?: JsonNullValueInput | InputJsonValue
+    crawlDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    level?: IntFieldUpdateOperationsInput | number
+    parentDocumentId?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }

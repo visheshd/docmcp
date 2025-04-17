@@ -126,6 +126,7 @@ exports.Prisma.DocumentScalarFieldEnum = {
   crawlDate: 'crawlDate',
   level: 'level',
   parentDocumentId: 'parentDocumentId',
+  jobId: 'jobId',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
