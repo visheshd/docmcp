@@ -17,6 +17,16 @@ const config = {
     rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 900000, // 15 minutes
     rateLimitMaxRequests: Number(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
   },
+  ollama: {
+    apiUrl: process.env.OLLAMA_API_URL || 'http://localhost:11434/api/embeddings',
+    embedModel: process.env.OLLAMA_EMBED_MODEL || 'granite-embedding:30m',
+  },
+  // Add chunking configuration
+  chunking: {
+    strategy: process.env.CHUNKING_STRATEGY || 'headings', // 'headings' or 'fixed'
+    fixedChunkSize: Number(process.env.FIXED_CHUNK_SIZE) || 1000, // Characters
+    fixedChunkOverlap: Number(process.env.FIXED_CHUNK_OVERLAP) || 100, // Characters
+  },
 };
 
 // Validate required environment variables

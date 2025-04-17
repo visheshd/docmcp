@@ -7,6 +7,8 @@ import { PrismaClient } from '../generated/prisma';
 import logger from '../utils/logger';
 import { ChunkService } from './chunk.service';
 import { DocumentService } from './document.service';
+import axios from 'axios';
+import config from '../config'; // Import the config
 
 // Define the metadata structure
 interface MetadataExtracted {
@@ -28,6 +30,13 @@ interface DocumentChunk {
   metadata: {
     title: string;
     sectionHeading?: string;
+    parentHeading?: string;
+    headingLevel?: number;
+    sectionIndex?: number;
+    language?: string;
+    chunkIndex?: number;
+    start?: number;
+    end?: number;
     order: number;
     type: 'content' | 'code' | 'table';
   };
@@ -103,9 +112,8 @@ export class DocumentProcessorService {
       // Chunk the document for efficient storage and retrieval
       const chunks = this.chunkDocument(markdown, mergedMetadata);
       
-      // Store chunks in database (if we have embeddings)
-      // Note: In a real implementation, you'd generate embeddings for each chunk
-      // We'll leave this as a placeholder for now
+      // Create embeddings for chunks and store them
+      await this.createChunkEmbeddings(chunks, documentId);
       
       // Update the document with processed markdown and metadata
       await this.documentService.updateDocument(documentId, {
@@ -199,7 +207,65 @@ export class DocumentProcessorService {
    * Convert HTML to Markdown using Turndown
    */
   private convertToMarkdown(html: string): string {
-    return this.turndownService.turndown(html);
+    const markdown = this.turndownService.turndown(html);
+    return this.normalizeMarkdown(markdown);
+  }
+
+  /**
+   * Normalize markdown content for consistency
+   */
+  private normalizeMarkdown(markdown: string): string {
+    let normalized = markdown;
+    
+    // Fix common markdown inconsistencies
+    normalized = this.fixConsecutiveHeadings(normalized);
+    normalized = this.fixExcessiveNewlines(normalized);
+    normalized = this.fixListSpacing(normalized);
+    normalized = this.standardizeLinks(normalized);
+    
+    return normalized;
+  }
+  
+  /**
+   * Fix cases where headings are directly adjacent without content between them
+   */
+  private fixConsecutiveHeadings(markdown: string): string {
+    // Add a line break between consecutive headings
+    return markdown.replace(/^(#{1,6} .+?)(\n)(#{1,6} .+?)$/gm, '$1\n$2$3');
+  }
+  
+  /**
+   * Remove excessive newlines to normalize spacing
+   */
+  private fixExcessiveNewlines(markdown: string): string {
+    // Replace 3+ consecutive newlines with just 2
+    return markdown.replace(/\n{3,}/g, '\n\n');
+  }
+  
+  /**
+   * Fix spacing around lists for better readability
+   */
+  private fixListSpacing(markdown: string): string {
+    // Ensure there's a blank line before lists
+    let normalized = markdown.replace(/([^\n])\n([-*+] )/g, '$1\n\n$2');
+    
+    // Ensure there's proper indentation for nested lists
+    normalized = normalized.replace(/\n([-*+] .*)\n\s*([-*+] )/g, '\n$1\n    $2');
+    
+    return normalized;
+  }
+  
+  /**
+   * Standardize link formats in markdown
+   */
+  private standardizeLinks(markdown: string): string {
+    // Convert HTML links to markdown format
+    let normalized = markdown.replace(/<a href="([^"]+)"[^>]*>([^<]+)<\/a>/g, '[$2]($1)');
+    
+    // Fix link references: [text] [ref] -> [text][ref]
+    normalized = normalized.replace(/\[([^\]]+)\] \[([^\]]+)\]/g, '[$1][$2]');
+    
+    return normalized;
   }
 
   /**
@@ -433,16 +499,95 @@ export class DocumentProcessorService {
    * Split document into chunks for efficient storage and retrieval
    */
   private chunkDocument(markdown: string, metadata: any): DocumentChunk[] {
+    const strategy = config.chunking.strategy;
+
+    if (strategy === 'fixed') {
+      return this.chunkDocumentFixedSize(
+        markdown, 
+        metadata, 
+        config.chunking.fixedChunkSize, 
+        config.chunking.fixedChunkOverlap
+      );
+    } else { // Default to headings strategy
+      return this.chunkDocumentByHeadings(markdown, metadata);
+    }
+  }
+
+  /**
+   * Chunk document using fixed-size chunks with overlap.
+   */
+  private chunkDocumentFixedSize(
+    markdown: string, 
+    docMetadata: any, 
+    chunkSize: number, 
+    overlap: number
+  ): DocumentChunk[] {
+    const chunks: DocumentChunk[] = [];
+    let startIndex = 0;
+    let chunkIndex = 0;
+
+    if (chunkSize <= overlap) {
+      logger.error('Chunk size must be greater than overlap. Using full document as one chunk.');
+      return [{
+        content: markdown,
+        metadata: {
+          title: docMetadata.title || 'Untitled Document',
+          order: 0,
+          type: 'content',
+        }
+      }];
+    }
+
+    while (startIndex < markdown.length) {
+      const endIndex = Math.min(startIndex + chunkSize, markdown.length);
+      const chunkContent = markdown.substring(startIndex, endIndex);
+      
+      chunks.push({
+        content: chunkContent,
+        metadata: {
+          title: docMetadata.title || 'Untitled Document',
+          chunkIndex: chunkIndex,
+          start: startIndex,
+          end: endIndex,
+          order: chunkIndex,
+          type: 'content'
+        }
+      });
+      
+      chunkIndex++;
+      startIndex += chunkSize - overlap;
+      
+      // Prevent infinite loop if overlap is too large or chunk size too small
+      if (startIndex >= markdown.length || chunkSize - overlap <= 0) {
+        break;
+      }
+    }
+    
+    return chunks;
+  }
+
+  /**
+   * Chunk document by splitting based on headings.
+   * (Renamed from chunkDocument)
+   */
+  private chunkDocumentByHeadings(markdown: string, metadata: any): DocumentChunk[] {
     const chunks: DocumentChunk[] = [];
     
     // Split the markdown by headings to create logical sections
     const sections = this.splitByHeadings(markdown);
     
+    // Create a document hierarchy based on headings
+    const hierarchy = this.createDocumentHierarchy(sections);
+    
     // Process each section
     sections.forEach((section, index) => {
       // Determine section heading (if any)
       const headingMatch = section.match(/^(#+)\s+(.+)$/m);
+      const headingLevel = headingMatch ? headingMatch[1].length : 0;
       const sectionHeading = headingMatch ? headingMatch[2].trim() : undefined;
+      
+      // Determine parent relationships based on heading levels
+      const parentHeading = this.findParentHeading(hierarchy, headingLevel, index);
       
       // Extract code blocks from the section
       const codeBlockRegex = /```([a-z]*)\n([\s\S]*?)```/g;
@@ -455,6 +600,9 @@ export class DocumentProcessorService {
         metadata: {
           title: metadata.title || 'Untitled Document',
           sectionHeading,
+          parentHeading,
+          headingLevel,
+          sectionIndex: index,
           order: index,
           type: 'content'
         }
@@ -472,6 +620,10 @@ export class DocumentProcessorService {
             metadata: {
               title: metadata.title || 'Untitled Document',
               sectionHeading,
+              parentHeading,
+              headingLevel,
+              language,
+              sectionIndex: index,
               order: index + (position * 0.1),
               type: 'code'
             }
@@ -490,6 +642,9 @@ export class DocumentProcessorService {
           metadata: {
             title: metadata.title || 'Untitled Document',
             sectionHeading,
+            parentHeading,
+            headingLevel,
+            sectionIndex: index,
             order: index + (position * 0.1),
             type: 'table'
           }
@@ -499,6 +654,51 @@ export class DocumentProcessorService {
     });
     
     return chunks;
+  }
+
+  /**
+   * Create a document hierarchy based on headings and their levels
+   */
+  private createDocumentHierarchy(sections: string[]): Array<{heading: string, level: number, index: number}> {
+    const hierarchy: Array<{heading: string, level: number, index: number}> = [];
+    
+    sections.forEach((section, index) => {
+      const headingMatch = section.match(/^(#+)\s+(.+)$/m);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        const heading = headingMatch[2].trim();
+        hierarchy.push({ heading, level, index });
+      } else {
+        // For sections without headings, treat as level 0 (top level)
+        hierarchy.push({ heading: '', level: 0, index });
+      }
+    });
+    
+    return hierarchy;
+  }
+  
+  /**
+   * Find the parent heading for a given section based on heading level hierarchy
+   */
+  private findParentHeading(
+    hierarchy: Array<{heading: string, level: number, index: number}>, 
+    currentLevel: number, 
+    currentIndex: number
+  ): string {
+    // If this is a top-level heading or not a heading, it has no parent
+    if (currentLevel <= 1) {
+      return '';
+    }
+    
+    // Look backwards through the hierarchy to find the nearest heading with a level one above this one
+    for (let i = currentIndex - 1; i >= 0; i--) {
+      const entry = hierarchy[i];
+      if (entry.level > 0 && entry.level < currentLevel) {
+        return entry.heading;
+      }
+    }
+    
+    return '';
   }
 
   /**
@@ -533,5 +733,118 @@ export class DocumentProcessorService {
     }
     
     return sections;
+  }
+
+  /**
+   * Create embeddings for document chunks and store them in the database
+   * @param chunks The document chunks to create embeddings for
+   * @param documentId The ID of the parent document
+   */
+  private async createChunkEmbeddings(chunks: DocumentChunk[], documentId: string): Promise<void> {
+    try {
+      // Skip embedding creation if no chunks
+      if (!chunks.length) {
+        return;
+      }
+
+      // Configuration for Ollama API - Now sourced from config
+      const ollamaApiUrl = config.ollama.apiUrl;
+      const ollamaModel = config.ollama.embedModel;
+
+      // Embedding function using Ollama API
+      const createEmbedding = async (text: string): Promise<number[]> => {
+        const maxRetries = 3;
+        const retryDelay = 1000; // 1 second
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const response = await axios.post(ollamaApiUrl, {
+              model: ollamaModel,
+              prompt: text,
+            });
+            
+            if (response.data && response.data.embedding) {
+              return response.data.embedding;
+            } else {
+              // This indicates a problem with Ollama's response format, unlikely to be fixed by retry
+              throw new Error('Invalid response structure from Ollama API');
+            }
+          } catch (error: any) { // Added type annotation for error
+            logger.warn(`Ollama API request failed (Attempt ${attempt}/${maxRetries})`, {
+              // Safely access error properties
+              errorMessage: error.message,
+              axiosErrorCode: error.code, // Common axios error code
+              responseStatus: error.response?.status,
+              responseData: error.response?.data,
+              chunkStart: text.substring(0, 50) + '...'
+            });
+
+            if (attempt === maxRetries) {
+              // If it's the last attempt, rethrow the error to be caught by the batch processing loop
+              logger.error(`Ollama API request failed after ${maxRetries} attempts.`, { 
+                chunkStart: text.substring(0, 100) + '...',
+                finalErrorMessage: error.message,
+                finalAxiosErrorCode: error.code,
+                finalResponseStatus: error.response?.status
+              });
+              throw error; // Rethrow the final error
+            }
+
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+          }
+        }
+        // Should not be reached if retries fail, as the error is rethrown
+        // Adding a fallback throw to satisfy TypeScript's need for a return/throw path
+        throw new Error('Embedding generation failed after multiple retries.'); 
+      };
+
+      // Process chunks in batches
+      const batchSize = 10; // Consider adjusting based on Ollama performance/limits
+      const chunksWithEmbeddings = [];
+
+      for (let i = 0; i < chunks.length; i += batchSize) {
+        const batchChunks = chunks.slice(i, i + batchSize);
+        // Note: Running embeddings sequentially per batch to avoid overwhelming Ollama
+        // If Ollama handles concurrent requests well, Promise.all could be used here.
+        for (const chunk of batchChunks) {
+          try {
+            const embedding = await createEmbedding(chunk.content);
+            chunksWithEmbeddings.push({
+              ...chunk,
+              embedding
+            });
+          } catch (batchError) {
+            // Log the error for the specific chunk but continue processing the rest of the batch/document
+            logger.error(`Failed to generate embedding for a chunk in document ${documentId}, skipping chunk.`, { chunkContentStart: chunk.content.substring(0, 50) });
+            // Optionally, you could add the chunk without an embedding or mark it somehow
+          }
+        }
+        // Optional: Add a small delay between batches if needed
+        // await new Promise(resolve => setTimeout(resolve, 100)); 
+      }
+
+      // Store chunks that successfully received embeddings
+      if (chunksWithEmbeddings.length > 0) {
+        await this.chunkService.createManyChunks(
+          chunksWithEmbeddings.map(chunk => ({
+            documentId,
+            content: chunk.content,
+            embedding: chunk.embedding, // This now comes from Ollama
+            metadata: chunk.metadata
+          })), 
+          documentId
+        );
+        logger.info(`Successfully created ${chunksWithEmbeddings.length} chunk embeddings for document ${documentId}`);
+      } else {
+        logger.warn(`No chunk embeddings were successfully generated for document ${documentId}`);
+      }
+
+    } catch (error) {
+      // Catch errors from the overall process (e.g., database errors during createManyChunks)
+      logger.error(`Error processing chunk embeddings for document ${documentId}:`, error);
+      // Decide if this should rethrow or be handled differently
+      throw error; 
+    }
   }
 } 
