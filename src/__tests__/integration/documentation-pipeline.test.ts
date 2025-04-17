@@ -103,7 +103,7 @@ describe('Documentation Processing Pipeline Integration', () => {
     // Setup axios mock for embeddings
     mockedAxios.post.mockResolvedValue({
       data: {
-        embedding: Array(384).fill(0.1),
+        embedding: Array(1536).fill(0.1),
       },
     });
   });
@@ -129,30 +129,58 @@ describe('Documentation Processing Pipeline Integration', () => {
     const documentService = new DocumentService(prisma);
     const documents = await prisma.document.findMany({
       where: { url: { startsWith: 'https://example.com/docs' } },
+      orderBy: { url: 'asc' },
     });
     
     expect(documents.length).toBe(2);
     expect(documents[0].title).toBe('Documentation Home');
     expect(documents[1].title).toBe('Page 1');
     
-    // Check that chunks were created with embeddings
-    const chunks = await prisma.chunk.findMany({
+    // Check that chunks were created (without embeddings initially)
+    const chunksData = await prisma.chunk.findMany({
       where: { documentId: { in: documents.map(d => d.id) } },
       select: {
         id: true,
-        content: true,
-        metadata: true,
-        embedding: true,
-        documentId: true,
-        createdAt: true,
-        updatedAt: true,
+        // embedding field removed from here
       }
     });
     
-    expect(chunks.length).toBeGreaterThan(0);
-    chunks.forEach(chunk => {
-      expect(chunk.embedding).toBeDefined();
-      expect(chunk.embedding.length).toBe(384);
+    expect(chunksData.length).toBeGreaterThan(0);
+    
+    // Now, fetch embeddings using raw query
+    const chunkIds = chunksData.map(c => c.id);
+    
+    // Type casting needed for raw query result
+    type ChunkWithEmbedding = { id: string; embedding: number[] }; 
+    
+    const embeddingsResult = await prisma.$queryRaw<ChunkWithEmbedding[]>`
+      SELECT id, embedding::text FROM chunks WHERE id = ANY(${chunkIds})
+    `;
+    
+    // Convert text representation back to array
+    const embeddingsMap = new Map(
+      embeddingsResult.map(e => {
+        let parsedEmbedding: number[] = [];
+        try {
+          // Assuming the ::text cast gives a JSON-parseable string like "[0.1, ... ]"
+          parsedEmbedding = JSON.parse(e.embedding as unknown as string);
+        } catch (parseError) {
+          console.error(`Failed to parse embedding string for chunk ${e.id}:`, e.embedding, parseError);
+          // Handle error appropriately, maybe fail the test or assign default
+        }
+        return [e.id, parsedEmbedding];
+      })
+    );
+
+    // Assertions on embeddings
+    chunksData.forEach(chunk => {
+      const embedding = embeddingsMap.get(chunk.id);
+      expect(embedding).toBeDefined();
+      // We need to parse the string representation '[0.1, 0.1, ...]' from pgvector
+      // Or rely on Prisma's raw query handling if it directly returns an array/vector type
+      // For now, assuming it returns an array directly due to potential driver handling
+      expect(Array.isArray(embedding)).toBe(true); 
+      expect(embedding?.length).toBe(1536); // Check dimension based on mocked embedding
     });
     
     // Check that job stats were updated

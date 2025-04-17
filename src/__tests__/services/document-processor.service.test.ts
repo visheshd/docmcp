@@ -53,8 +53,8 @@ describe('DocumentProcessorService', () => {
     it('should generate embeddings and call createManyChunks', async () => {
       const documentId = 'test-doc-id';
       const html = `<html><body><h1>Title</h1><p>Chunk 1 content.</p><h2>Subtitle</h2><p>Chunk 2 content.</p></body></html>`;
-      const dummyEmbedding1 = Array(384).fill(0.1); // Dimension based on granite-30m
-      const dummyEmbedding2 = Array(384).fill(0.2);
+      const dummyEmbedding1 = Array(1536).fill(0.1); // Dimension based on granite-30m
+      const dummyEmbedding2 = Array(1536).fill(0.2);
 
       // Mock the Ollama API response
       mockedAxios.post
@@ -91,7 +91,7 @@ describe('DocumentProcessorService', () => {
     it('should handle Ollama API errors gracefully', async () => {
       const documentId = 'test-doc-id';
       const html = `<html><body><h1>Title</h1><p>Chunk 1 content.</p><h2>Subtitle</h2><p>Chunk 2 content.</p></body></html>`;
-      const dummyEmbedding2 = Array(384).fill(0.2);
+      const dummyEmbedding2 = Array(1536).fill(0.2);
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
       // Custom mock implementation for axios.post for this test
@@ -382,7 +382,7 @@ describe('DocumentProcessorService', () => {
       const expectedChunk4 = expectedMarkdown.substring(30, 45); // "is is the secon"
       const expectedChunk5 = expectedMarkdown.substring(40, 55); // " the second part."
 
-      const dummyEmbedding = Array(384).fill(0.3);
+      const dummyEmbedding = Array(1536).fill(0.3);
       mockedAxios.post.mockResolvedValue({ data: { embedding: dummyEmbedding } });
 
       await documentProcessorService.processDocument(documentId, html);

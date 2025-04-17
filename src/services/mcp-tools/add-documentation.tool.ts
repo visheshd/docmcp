@@ -112,8 +112,18 @@ export async function startCrawlingProcess(jobId: string, params: AddDocumentati
     await jobService.updateJobMetadata(jobId, { stage: 'processing' });
     logger.info(`Crawling completed for job ${jobId}, starting document processing`);
     
-    // Get all documents created by the crawler for this URL
-    const documents = await documentService.findDocumentsByUrl(params.url);
+    // Get all documents created by the crawler starting from the base URL
+    // Extract base URL to find all related documents
+    const baseUrl = new URL(params.url).origin + new URL(params.url).pathname;
+    
+    const documents = await prisma.document.findMany({
+      where: {
+        url: { startsWith: baseUrl } // Find all docs starting with the base path
+        // Potential improvement: Add a jobId to documents and filter by that
+      }
+    });
+    
+    // const documents = await documentService.findDocumentsByUrl(params.url); // Old method
     logger.info(`Found ${documents.length} documents to process for job ${jobId}`);
     
     // Process each document (convert HTML to markdown, chunk, create embeddings)

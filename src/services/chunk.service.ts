@@ -13,6 +13,13 @@ interface CreateChunkInput {
   id?: string; // Allow optional ID for direct insertion if needed, but generate if not provided
 }
 
+// Define input type for updates, specifically for raw query construction
+interface UpdateChunkInput { 
+  embedding?: number[];
+  content?: string; // Simplified to string for raw query
+  metadata?: Prisma.InputJsonValue; // Use InputJsonValue as expected by JSON.stringify
+}
+
 export class ChunkService {
   private prisma: PrismaClient;
 
@@ -114,7 +121,7 @@ export class ChunkService {
   /**
    * Update a chunk
    */
-  async updateChunk(id: string, data: Prisma.ChunkUpdateInput) {
+  async updateChunk(id: string, data: UpdateChunkInput) {
     try {
       // Prepare fields for raw query
       const updates = [];
