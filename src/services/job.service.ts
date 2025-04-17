@@ -498,6 +498,7 @@ export class JobService {
         url: job.url,
         name: job.name,
         tags: job.tags,
+        metadata: job.metadata,
         startDate: job.startDate,
         endDate: job.endDate,
         error: job.error,
@@ -517,6 +518,219 @@ export class JobService {
       };
     } catch (error) {
       logger.error('Error getting job status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clean up old jobs based on a specified threshold
+   * @param thresholdDays Number of days after which a job is considered old
+   * @param statusFilter Optional filter for job statuses to clean up
+   */
+  async cleanupOldJobs(thresholdDays: number = 30, statusFilter?: JobStatus[]) {
+    try {
+      const thresholdDate = new Date();
+      thresholdDate.setDate(thresholdDate.getDate() - thresholdDays);
+      
+      const whereClause: Prisma.JobWhereInput = {
+        lastActivity: {
+          lt: thresholdDate
+        }
+      };
+      
+      // Add status filter if provided
+      if (statusFilter && statusFilter.length > 0) {
+        whereClause.status = {
+          in: statusFilter
+        };
+      }
+      
+      // Find jobs matching the criteria
+      const oldJobs = await this.prisma.job.findMany({
+        where: whereClause,
+        select: { id: true }
+      });
+      
+      if (oldJobs.length === 0) {
+        logger.info(`No old jobs found older than ${thresholdDays} days`);
+        return { deletedCount: 0 };
+      }
+      
+      // Delete the old jobs
+      const result = await this.prisma.job.deleteMany({
+        where: {
+          id: {
+            in: oldJobs.map(job => job.id)
+          }
+        }
+      });
+      
+      logger.info(`Cleaned up ${result.count} old jobs older than ${thresholdDays} days`);
+      return { deletedCount: result.count };
+    } catch (error) {
+      logger.error('Error cleaning up old jobs:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Retry a failed job by creating a new job with the same parameters
+   * @param id The ID of the failed job to retry
+   */
+  async retryFailedJob(id: string) {
+    try {
+      // Find the failed job
+      const failedJob = await this.prisma.job.findUnique({
+        where: { id }
+      });
+      
+      if (!failedJob) {
+        throw new Error(`Job with ID ${id} not found`);
+      }
+      
+      if (failedJob.status !== 'failed') {
+        throw new Error(`Cannot retry job with status '${failedJob.status}'. Only failed jobs can be retried.`);
+      }
+      
+      // Create a new job with the same parameters
+      const newJob = await this.prisma.job.create({
+        data: {
+          url: failedJob.url,
+          type: failedJob.type,
+          name: failedJob.name,
+          tags: failedJob.tags,
+          maxDepth: failedJob.maxDepth,
+          metadata: failedJob.metadata as Prisma.InputJsonValue,
+          status: 'pending',
+          progress: 0,
+          startDate: new Date(),
+          lastActivity: new Date(),
+          stats: { pagesProcessed: 0, pagesSkipped: 0, totalChunks: 0 } as Prisma.InputJsonValue,
+          stage: 'initializing'
+        }
+      });
+      
+      logger.info(`Retried failed job ${id}. Created new job with ID ${newJob.id}`);
+      
+      return {
+        originalJobId: id,
+        newJobId: newJob.id,
+        status: 'pending'
+      };
+    } catch (error) {
+      logger.error(`Error retrying failed job ${id}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get aggregate statistics across multiple jobs
+   * @param filter Optional filter for job types or status
+   */
+  async getJobStatistics(filter?: { types?: JobType[], statuses?: JobStatus[] }) {
+    try {
+      const whereClause: Prisma.JobWhereInput = {};
+      
+      if (filter?.types && filter.types.length > 0) {
+        whereClause.type = {
+          in: filter.types
+        };
+      }
+      
+      if (filter?.statuses && filter.statuses.length > 0) {
+        whereClause.status = {
+          in: filter.statuses
+        };
+      }
+      
+      // Get all jobs matching the filter
+      const jobs = await this.prisma.job.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          status: true,
+          type: true,
+          startDate: true,
+          endDate: true,
+          progress: true,
+          itemsProcessed: true,
+          itemsSkipped: true,
+          itemsFailed: true,
+          errorCount: true,
+          stats: true
+        }
+      });
+      
+      // Calculate aggregate statistics
+      const totalJobs = jobs.length;
+      const jobsByStatus = jobs.reduce((acc, job) => {
+        acc[job.status] = (acc[job.status] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      const jobsByType = jobs.reduce((acc, job) => {
+        acc[job.type] = (acc[job.type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      // Calculate averages and totals
+      const completedJobs = jobs.filter(job => job.status === 'completed');
+      const failedJobs = jobs.filter(job => job.status === 'failed');
+      
+      // Calculate average processing time for completed jobs
+      const avgProcessingTime = completedJobs.length > 0
+        ? completedJobs.reduce((sum, job) => {
+            if (job.startDate && job.endDate) {
+              return sum + (job.endDate.getTime() - job.startDate.getTime()) / 1000;
+            }
+            return sum;
+          }, 0) / completedJobs.length
+        : 0;
+      
+      // Aggregate document statistics
+      const totalStats = jobs.reduce((acc, job) => {
+        const stats = job.stats as Record<string, number>;
+        if (stats) {
+          acc.pagesProcessed += stats.pagesProcessed || 0;
+          acc.pagesSkipped += stats.pagesSkipped || 0;
+          acc.totalChunks += stats.totalChunks || 0;
+        }
+        
+        acc.itemsProcessed += job.itemsProcessed || 0;
+        acc.itemsSkipped += job.itemsSkipped || 0;
+        acc.itemsFailed += job.itemsFailed || 0;
+        acc.errorCount += job.errorCount || 0;
+        
+        return acc;
+      }, {
+        pagesProcessed: 0,
+        pagesSkipped: 0,
+        totalChunks: 0,
+        itemsProcessed: 0,
+        itemsSkipped: 0,
+        itemsFailed: 0,
+        errorCount: 0
+      });
+      
+      // Calculate success rate
+      const successRate = totalJobs > 0
+        ? completedJobs.length / totalJobs
+        : 0;
+      
+      logger.info(`Generated job statistics for ${totalJobs} jobs`);
+      
+      return {
+        totalJobs,
+        jobsByStatus,
+        jobsByType,
+        completedJobsCount: completedJobs.length,
+        failedJobsCount: failedJobs.length,
+        successRate,
+        avgProcessingTime,
+        totalStats
+      };
+    } catch (error) {
+      logger.error('Error getting job statistics:', error);
       throw error;
     }
   }
