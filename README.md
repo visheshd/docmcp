@@ -21,6 +21,82 @@ The system consists of several core services:
 - **ChunkService**: Stores and retrieves document chunks with vector search capabilities
 - **MCP Tools**: Agent-friendly interface for adding and querying documentation
 
+### Document Processing Pipeline
+
+The DocMCP system processes documentation through the following pipeline:
+
+1. **Documentation Input**
+   - User provides a URL through the `add_documentation` MCP tool
+   - System creates a Job record with "pending" status
+   - Job is assigned tags for categorization and future filtering
+
+2. **Web Crawling** (CrawlerService)
+   - Crawler respects robots.txt restrictions
+   - Follows links up to specified maximum depth
+   - Captures HTML content and metadata
+   - Creates Document records linked to the parent Job
+
+3. **Document Processing** (DocumentProcessorService)
+   - Cleans HTML and converts to structured Markdown
+   - Extracts metadata (package info, version, document type)
+   - Establishes parent-child relationships between documents
+   - Updates Job progress as processing continues
+
+4. **Chunking & Embedding** (ChunkService)
+   - Splits documents into semantic chunks for better retrieval
+   - Generates vector embeddings for each chunk
+   - Stores embeddings in PostgreSQL with pgvector extension
+   - Preserves chunk metadata and document references
+
+5. **Job Finalization** (JobService)
+   - Updates Job status to "completed"
+   - Calculates and stores document statistics
+   - Makes documents available for querying
+
+6. **Querying & Retrieval**
+   - User sends query through `query_documentation` MCP tool
+   - System converts query to vector embedding
+   - Performs similarity search to find relevant chunks
+   - Returns formatted results with source information
+   - Supports filtering by tags, status, and metadata
+
+This pipeline enables efficient storage, processing, and retrieval of documentation with semantic understanding capabilities. All steps are tracked through the job system, allowing detailed progress monitoring and error handling.
+
+## Project Structure
+
+```
+docmcp/
+├── prisma/                  # Database schema and migrations
+│   └── schema.prisma        # Prisma model definitions and database configuration
+├── src/
+│   ├── config/              # Application configuration
+│   │   └── database.ts      # Database connection setup
+│   ├── generated/           # Generated code (Prisma client)
+│   ├── services/            # Core service modules
+│   │   ├── crawler.service.ts     # Website crawling functionality
+│   │   ├── document.service.ts    # Document management
+│   │   ├── document-processor.service.ts # Document processing and transformation
+│   │   ├── job.service.ts         # Async job management
+│   │   ├── chunk.service.ts       # Document chunking and vector operations
+│   │   └── mcp-tools/       # MCP integration tools
+│   │       ├── add-documentation.tool.ts    # Tool for adding new documentation
+│   │       ├── get-job-status.tool.ts       # Tool for checking job status
+│   │       ├── list-documentation.tool.ts   # Tool for listing available documentation
+│   │       ├── query-documentation.tool.ts  # Tool for querying documentation
+│   │       ├── sample.tool.ts               # Example tool implementation
+│   │       └── index.ts                     # Tool registry and exports
+│   ├── types/               # TypeScript type definitions
+│   │   └── mcp.ts           # MCP tool interface definitions
+│   ├── utils/               # Utility functions
+│   │   ├── logger.ts        # Logging utilities
+│   │   └── prisma-filters.ts # Reusable Prisma filtering patterns
+│   └── __tests__/           # Test files
+│       └── utils/           # Test utilities
+│           └── testDb.ts    # Test database setup and teardown
+├── .env                     # Environment variables
+└── package.json             # Project dependencies and scripts
+```
+
 ## Getting Started
 
 ### Prerequisites
@@ -73,6 +149,38 @@ Query your documentation using natural language:
 curl -X POST http://localhost:3000/mcp \
   -H "Content-Type: application/json" \
   -d '{"function": "query_documentation", "parameters": {"query": "How do I authenticate users?"}}'
+```
+
+## Listing Documentation
+
+List available documentation with filtering options:
+
+```bash
+curl -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"function": "list_documentation", "parameters": {"tags": ["react"], "status": "completed", "page": 1, "pageSize": 10}}'
+```
+
+## Available MCP Tools
+
+The system provides the following MCP tools for integration with AI agents and external systems:
+
+| Tool Name | Description | Example Parameters |
+|-----------|-------------|-------------------|
+| `add_documentation` | Add documentation from a URL for crawling and processing | `{"url": "https://example.com/docs", "maxDepth": 3, "tags": ["react"]}` |
+| `list_documentation` | List available documentation with filtering options | `{"tags": ["react"], "status": "completed", "page": 1, "pageSize": 10}` |
+| `query_documentation` | Search documentation using semantic vectors | `{"query": "How to authenticate users?", "maxResults": 5}` |
+| `get_job_status` | Check the status of a documentation processing job | `{"jobId": "550e8400-e29b-41d4-a716-446655440000"}` |
+
+All tools are accessible through the MCP endpoint at `POST /mcp` with the following format:
+
+```json
+{
+  "function": "tool_name",
+  "parameters": {
+    // Tool-specific parameters
+  }
+}
 ```
 
 ## Job Management Pattern
