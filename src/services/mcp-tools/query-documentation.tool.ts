@@ -77,7 +77,8 @@ const queryDocumentationHandler = async (params: QueryDocumentationParams) => {
     // Find similar chunks
     const similarChunks = await chunkService.findSimilarChunks(
       queryEmbedding,
-      params.limit || 5
+      params.limit || 5,
+      params.package
     );
     
     if (!similarChunks.length) {

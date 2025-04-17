@@ -196,6 +196,42 @@ describe('ChunkService Integration Tests', () => {
       expect(results[0].title).toBe(testDocument.title);
       expect(results[0].url).toBe(testDocument.url);
     });
+
+    it('should filter results by package name when provided', async () => {
+      // Create a document with specific package metadata
+      const reactDoc = await prisma.document.create({
+        data: {
+          url: 'https://react.dev/docs',
+          title: 'React Documentation',
+          content: 'React API documentation',
+          metadata: { package: 'react', version: '18.0.0', type: 'api', tags: ['react'] },
+          crawlDate: new Date(),
+          level: 1,
+          parentDocumentId: null,
+        },
+      });
+
+      // Create chunks for both documents
+      const chunksToCreate = [
+        { documentId: testDocument.id, content: 'Test Documentation', embedding: new Array(1536).fill(0).map((_, i) => i === 0 ? 0.5 : 0), metadata: { type: 'test' } },
+        { documentId: reactDoc.id, content: 'React component documentation', embedding: new Array(1536).fill(0).map((_, i) => i === 0 ? 0.1 : 0), metadata: { type: 'react' } },
+      ];
+      
+      for (const chunkData of chunksToCreate) {
+        await chunkService.createChunk(chunkData);
+      }
+
+      // Search with package filter
+      const queryEmbedding = new Array(1536).fill(0).map((_, i) => i === 0 ? 0.3 : 0);
+      const results = await chunkService.findSimilarChunks(queryEmbedding, 5, 'react');
+
+      // Verify only results from the react package are returned
+      expect(results).toBeDefined();
+      expect(Array.isArray(results)).toBe(true);
+      expect(results.length).toBe(1);
+      expect(results[0].title).toBe('React Documentation');
+      expect(results[0].url).toBe('https://react.dev/docs');
+    });
   });
 
   describe('updateChunk', () => {

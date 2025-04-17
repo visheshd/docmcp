@@ -77,7 +77,30 @@ describe('Query Documentation Tool', () => {
     });
     
     // Verify the limit was passed to findSimilarChunks
-    expect(mockedChunkService.prototype.findSimilarChunks).toHaveBeenCalledWith([0.1, 0.2, 0.3], 10);
+    expect(mockedChunkService.prototype.findSimilarChunks).toHaveBeenCalledWith([0.1, 0.2, 0.3], 10, undefined);
+  });
+
+  it('should respect the package parameter', async () => {
+    // Execute the handler function with a package filter
+    await queryDocumentationTool.handler({
+      query: 'API documentation',
+      package: 'react'
+    });
+    
+    // Verify the package parameter was passed to findSimilarChunks
+    expect(mockedChunkService.prototype.findSimilarChunks).toHaveBeenCalledWith([0.1, 0.2, 0.3], 5, 'react');
+  });
+
+  it('should handle both limit and package parameters together', async () => {
+    // Execute the handler function with both limit and package
+    await queryDocumentationTool.handler({
+      query: 'API documentation',
+      limit: 8,
+      package: 'prisma'
+    });
+    
+    // Verify both parameters were passed correctly
+    expect(mockedChunkService.prototype.findSimilarChunks).toHaveBeenCalledWith([0.1, 0.2, 0.3], 8, 'prisma');
   });
 
   it('should handle errors during embedding generation', async () => {

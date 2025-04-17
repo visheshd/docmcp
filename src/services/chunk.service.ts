@@ -82,9 +82,14 @@ export class ChunkService {
    * Find similar chunks using vector similarity
    * @param embedding - The embedding vector to compare against
    * @param limit - Maximum number of similar chunks to return (default: 5)
+   * @param packageName - Optional package name to filter results (e.g., 'react', 'prisma')
    * @returns Promise<Array<{ id: string; content: string; metadata: Prisma.JsonValue; documentId: string; url: string; title: string; similarity: number; }>>
    */
-  async findSimilarChunks(embedding: number[], limit = 5): Promise<Array<{
+  async findSimilarChunks(
+    embedding: number[], 
+    limit = 5,
+    packageName?: string
+  ): Promise<Array<{
     id: string;
     content: string;
     metadata: Prisma.JsonValue;
@@ -106,21 +111,45 @@ export class ChunkService {
 
       const embeddingSql = pgvector.toSql(embedding);
 
-      const results = await this.prisma.$queryRaw<ChunkResult[]>`
-        SELECT
-          c.id,
-          c.content,
-          c.metadata,
-          c.document_id AS "documentId",
-          d.url,
-          d.title,
-          -- Use cosine similarity (<=>). Higher values mean more similar.
-          (c.embedding <=> ${embeddingSql}::vector) as similarity
-        FROM chunks c
-        JOIN documents d ON c.document_id = d.id
-        ORDER BY similarity DESC -- Order by cosine similarity descending
-        LIMIT ${limit}
-      `;
+      // Build the SQL query based on whether package filtering is needed
+      let results: ChunkResult[];
+      
+      if (packageName) {
+        // Query with package filtering
+        results = await this.prisma.$queryRaw<ChunkResult[]>`
+          SELECT
+            c.id,
+            c.content,
+            c.metadata,
+            c.document_id AS "documentId",
+            d.url,
+            d.title,
+            -- Use cosine similarity (<=>). Higher values mean more similar.
+            (c.embedding <=> ${embeddingSql}::vector) as similarity
+          FROM chunks c
+          JOIN documents d ON c.document_id = d.id
+          WHERE (d.metadata->>'package' = ${packageName} OR d.url LIKE ${`%${packageName}%`})
+          ORDER BY similarity DESC -- Order by cosine similarity descending
+          LIMIT ${limit}
+        `;
+      } else {
+        // Query without package filtering
+        results = await this.prisma.$queryRaw<ChunkResult[]>`
+          SELECT
+            c.id,
+            c.content,
+            c.metadata,
+            c.document_id AS "documentId",
+            d.url,
+            d.title,
+            -- Use cosine similarity (<=>). Higher values mean more similar.
+            (c.embedding <=> ${embeddingSql}::vector) as similarity
+          FROM chunks c
+          JOIN documents d ON c.document_id = d.id
+          ORDER BY similarity DESC -- Order by cosine similarity descending
+          LIMIT ${limit}
+        `;
+      }
 
       return results;
     } catch (error) {
