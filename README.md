@@ -167,8 +167,26 @@ Once the DocMCP service is running via Docker (using `./docker-start.sh`), the M
 
 1.  **Start DocMCP:** Ensure the Docker containers are running (`./docker-start.sh`).
 2.  **Verify Ollama Access:** Confirm that your Ollama instance (specified in `.env`) is running and accessible from the DocMCP Docker container. Test this if unsure.
-3.  **Configure Agent:** Configure your AI agent (like Cursor) to use `http://localhost:1337/mcp` as the base URL for accessing DocMCP's tools.
+3.  **Configure Agent:** Configure your AI agent (like Cursor) to use `http://localhost:1337/mcp` as the base URL for accessing DocMCP's tools. 
+    *   In Cursor, this is typically done by editing your `settings.json` file (Command Palette -> "Preferences: Open User Settings (JSON)") and adding an entry under `mcpServers`. 
+    *   See the example configuration below.
 4.  **Use Tools:** The agent can now make POST requests to this endpoint to call the available MCP tools (e.g., `add_documentation`, `query_documentation`, `list_documentation`, `get_job_status`) as described below.
+
+**Example Cursor `settings.json` Configuration:**
+
+```json
+{
+  // ... other settings ...
+  "mcpServers": {
+    "docmcp-local": { // You can change "docmcp-local" to any name you prefer
+      "url": "http://localhost:1337/mcp" // Use the correct endpoint
+      // "env": {} // env block is likely not needed for this server
+    }
+    // ... potentially other MCP servers ...
+  }
+  // ... other settings ...
+}
+```
 
 **Note:** If your agent is running outside the Docker network, `localhost` should work if the agent is on the same host machine. If the agent is elsewhere, use the host machine's IP address and ensure firewalls permit access to port 1337.
 
