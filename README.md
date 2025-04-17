@@ -131,12 +131,75 @@ Start the server:
 npm run dev
 ```
 
+## Docker Deployment
+
+DocMCP can be easily deployed using Docker and Docker Compose.
+
+### Prerequisites
+
+- Docker
+- Docker Compose
+
+### Quick Start
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/docmcp.git
+   cd docmcp
+   ```
+
+2. Start the application:
+   ```bash
+   ./docker-start.sh
+   ```
+
+   This script will:
+   - Create necessary directories
+   - Set up proper permissions
+   - Build and start the containers
+   - Display the URL to access the application
+
+3. Stop the application:
+   ```bash
+   ./docker-stop.sh
+   ```
+
+### Configuration
+
+The Docker setup includes:
+
+- **Application Container**: Node.js application running the DocMCP server
+- **PostgreSQL Container**: Database with pgvector extension for vector operations
+- **Persistent Volumes**: Data is preserved between container restarts
+- **Health Checks**: Automatic monitoring of service health
+- **Environment Variables**: Configured in docker-compose.yml
+
+To customize the configuration, edit the following files:
+
+- `docker-compose.yml`: Container setup and environment variables
+- `.env`: Application configuration (create from .env.example)
+- `Dockerfile`: Application build process
+
+### Accessing Logs
+
+View logs for all services:
+```bash
+docker-compose logs -f
+```
+
+View logs for a specific service:
+```bash
+docker-compose logs -f app
+# or
+docker-compose logs -f postgres
+```
+
 ## Adding Documentation
 
 Add documentation by providing a URL:
 
 ```bash
-curl -X POST http://localhost:3000/mcp \
+curl -X POST http://localhost:1337/mcp \
   -H "Content-Type: application/json" \
   -d '{"function": "add_documentation", "parameters": {"url": "https://example.com/docs", "maxDepth": 3}}'
 ```
@@ -146,7 +209,7 @@ curl -X POST http://localhost:3000/mcp \
 Query your documentation using natural language:
 
 ```bash
-curl -X POST http://localhost:3000/mcp \
+curl -X POST http://localhost:1337/mcp \
   -H "Content-Type: application/json" \
   -d '{"function": "query_documentation", "parameters": {"query": "How do I authenticate users?"}}'
 ```
@@ -156,7 +219,7 @@ curl -X POST http://localhost:3000/mcp \
 List available documentation with filtering options:
 
 ```bash
-curl -X POST http://localhost:3000/mcp \
+curl -X POST http://localhost:1337/mcp \
   -H "Content-Type: application/json" \
   -d '{"function": "list_documentation", "parameters": {"tags": ["react"], "status": "completed", "page": 1, "pageSize": 10}}'
 ```
