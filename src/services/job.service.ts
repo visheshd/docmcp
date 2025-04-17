@@ -1,5 +1,5 @@
 import { getPrismaClient as getMainPrismaClient } from '../config/database';
-import { PrismaClient, Job, JobStatus, JobType, Prisma } from '../generated/prisma';
+import { PrismaClient, Job, JobStatus, JobType, JobStage, Prisma } from '../generated/prisma';
 import logger from '../utils/logger';
 
 // Define interfaces for creating different types of jobs
@@ -59,7 +59,9 @@ export class JobService {
             status: data.status || 'pending',
             progress: data.progress || 0,
             type: 'crawl',
+            stage: 'initializing',
             stats: { pagesProcessed: 0, pagesSkipped: 0, totalChunks: 0 },
+            lastActivity: new Date(),
           },
         });
         
@@ -149,6 +151,7 @@ export class JobService {
         data: {
           status,
           progress,
+          lastActivity: new Date(),
           ...(status === 'completed' || status === 'failed' ? { endDate: new Date() } : {}),
         },
       });
@@ -171,6 +174,11 @@ export class JobService {
           status: 'failed',
           error,
           endDate: new Date(),
+          errorCount: {
+            increment: 1
+          },
+          lastError: new Date(),
+          lastActivity: new Date(),
         },
       });
       logger.error(`Job ${id} failed with error: ${error}`);
@@ -190,6 +198,10 @@ export class JobService {
         where: { id },
         data: {
           stats: stats as Prisma.InputJsonValue,
+          itemsProcessed: stats.pagesProcessed,
+          itemsSkipped: stats.pagesSkipped,
+          itemsTotal: stats.pagesProcessed + stats.pagesSkipped,
+          lastActivity: new Date(),
         },
       });
       logger.debug(`Updated job ${id} stats: ${JSON.stringify(stats)}`);
@@ -221,6 +233,7 @@ export class JobService {
         where: { id },
         data: {
           metadata: updatedMetadata as Prisma.InputJsonValue,
+          lastActivity: new Date(),
         },
       });
       
@@ -244,6 +257,266 @@ export class JobService {
       return job;
     } catch (error) {
       logger.error('Error deleting job:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update job stage
+   */
+  async updateJobStage(id: string, stage: JobStage) {
+    try {
+      const job = await this.prisma.job.update({
+        where: { id },
+        data: {
+          stage,
+          lastActivity: new Date(),
+        },
+      });
+      logger.info(`Updated job ${id} stage to ${stage}`);
+      return job;
+    } catch (error) {
+      logger.error('Error updating job stage:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update job item progress
+   */
+  async updateJobItems(id: string, itemsTotal: number, itemsProcessed: number, itemsFailed: number = 0, itemsSkipped: number = 0) {
+    try {
+      const job = await this.prisma.job.update({
+        where: { id },
+        data: {
+          itemsTotal,
+          itemsProcessed,
+          itemsFailed,
+          itemsSkipped,
+          // Calculate progress as a percentage
+          progress: itemsTotal > 0 ? itemsProcessed / itemsTotal : 0,
+          lastActivity: new Date(),
+        },
+      });
+      logger.debug(`Updated job ${id} items: ${itemsProcessed}/${itemsTotal}`);
+      return job;
+    } catch (error) {
+      logger.error('Error updating job items:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update job time estimates
+   */
+  async updateJobTimeEstimates(id: string, timeElapsed: number, estimatedCompletion?: Date) {
+    try {
+      // Calculate remaining time if not provided explicitly
+      let timeRemaining: number | null = null;
+      
+      if (estimatedCompletion) {
+        const now = new Date();
+        timeRemaining = Math.max(0, Math.floor((estimatedCompletion.getTime() - now.getTime()) / 1000));
+      }
+      
+      const job = await this.prisma.job.update({
+        where: { id },
+        data: {
+          timeElapsed,
+          ...(estimatedCompletion ? { estimatedCompletion } : {}),
+          ...(timeRemaining !== null ? { timeRemaining } : {}),
+          lastActivity: new Date(),
+        },
+      });
+      
+      if (estimatedCompletion) {
+        logger.debug(`Updated job ${id} estimated completion to ${estimatedCompletion.toISOString()}`);
+      } else {
+        logger.debug(`Updated job ${id} time elapsed to ${timeElapsed} seconds`);
+      }
+      
+      return job;
+    } catch (error) {
+      logger.error('Error updating job time estimates:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel a job
+   */
+  async cancelJob(id: string, reason?: string) {
+    try {
+      const job = await this.prisma.job.update({
+        where: { id },
+        data: {
+          shouldCancel: true,
+          status: 'cancelled',
+          endDate: new Date(),
+          ...(reason ? {
+            error: `Job cancelled: ${reason}`,
+          } : {}),
+          lastActivity: new Date(),
+        },
+      });
+      logger.info(`Job ${id} marked for cancellation${reason ? `: ${reason}` : ''}`);
+      return job;
+    } catch (error) {
+      logger.error('Error cancelling job:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Pause a job
+   */
+  async pauseJob(id: string) {
+    try {
+      const job = await this.prisma.job.update({
+        where: { id },
+        data: {
+          shouldPause: true,
+          status: 'paused',
+          lastActivity: new Date(),
+        },
+      });
+      logger.info(`Job ${id} marked for pause`);
+      return job;
+    } catch (error) {
+      logger.error('Error pausing job:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Resume a paused job
+   */
+  async resumeJob(id: string) {
+    try {
+      const job = await this.prisma.job.update({
+        where: { id },
+        data: {
+          shouldPause: false,
+          status: 'running',
+          lastActivity: new Date(),
+        },
+      });
+      logger.info(`Job ${id} resumed`);
+      return job;
+    } catch (error) {
+      logger.error('Error resuming job:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all active jobs
+   */
+  async getActiveJobs() {
+    try {
+      const jobs = await this.prisma.job.findMany({
+        where: {
+          status: {
+            in: ['pending', 'running', 'paused']
+          }
+        },
+        orderBy: [
+          { priority: 'desc' },
+          { createdAt: 'asc' }
+        ]
+      });
+      return jobs;
+    } catch (error) {
+      logger.error('Error getting active jobs:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get detailed job status
+   */
+  async getJobStatus(id: string) {
+    try {
+      const job = await this.prisma.job.findUnique({
+        where: { id },
+        include: {
+          _count: {
+            select: {
+              documents: true
+            }
+          }
+        }
+      });
+      
+      if (!job) {
+        throw new Error(`Job with ID ${id} not found`);
+      }
+      
+      // Calculate elapsed time if job is still running
+      let calculatedTimeElapsed = job.timeElapsed || 0;
+      if (job.status === 'running' && job.startDate) {
+        const now = new Date();
+        calculatedTimeElapsed = Math.floor((now.getTime() - job.startDate.getTime()) / 1000);
+      }
+      
+      // Calculate estimated time remaining based on progress
+      let estimatedRemaining = job.timeRemaining;
+      if (job.status === 'running' && job.progress > 0 && calculatedTimeElapsed > 0) {
+        const progressRate = job.progress / calculatedTimeElapsed; // progress per second
+        if (progressRate > 0) {
+          estimatedRemaining = Math.floor((1 - job.progress) / progressRate);
+        }
+      }
+      
+      // Calculate estimated completion time
+      let estimatedCompletion = job.estimatedCompletion;
+      if (job.status === 'running' && estimatedRemaining && !estimatedCompletion) {
+        estimatedCompletion = new Date(Date.now() + estimatedRemaining * 1000);
+      }
+      
+      // Calculate progress percentage
+      const progressPercentage = Math.round(job.progress * 100);
+      
+      // Format stats for output
+      const stats = {
+        ...(job.stats as Record<string, any>),
+        documentsCount: job._count.documents,
+        itemsTotal: job.itemsTotal,
+        itemsProcessed: job.itemsProcessed,
+        itemsFailed: job.itemsFailed,
+        itemsSkipped: job.itemsSkipped,
+      };
+      
+      // Construct the detailed status
+      return {
+        id: job.id,
+        type: job.type,
+        stage: job.stage,
+        status: job.status,
+        progress: job.progress,
+        progressPercentage,
+        url: job.url,
+        name: job.name,
+        tags: job.tags,
+        startDate: job.startDate,
+        endDate: job.endDate,
+        error: job.error,
+        errorCount: job.errorCount,
+        lastError: job.lastError,
+        stats,
+        timeElapsed: calculatedTimeElapsed,
+        timeRemaining: estimatedRemaining,
+        estimatedCompletion,
+        lastActivity: job.lastActivity,
+        duration: job.endDate && job.startDate 
+          ? Math.floor((job.endDate.getTime() - job.startDate.getTime()) / 1000)
+          : calculatedTimeElapsed,
+        canCancel: ['pending', 'running', 'paused'].includes(job.status),
+        canPause: job.status === 'running',
+        canResume: job.status === 'paused',
+      };
+    } catch (error) {
+      logger.error('Error getting job status:', error);
       throw error;
     }
   }
