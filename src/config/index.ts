@@ -1,10 +1,19 @@
-import dotenv from 'dotenv';
 import logger from '../utils/logger';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables only in non-production environments
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    const dotenv = require('dotenv'); // Use require for conditional loading
+    dotenv.config();
+  } catch (error) {
+    logger.warn('dotenv module not found, skipping .env file loading.');
+    // Optional: Handle the error further if needed
+  }
+}
 
 const config = {
+  projectName: process.env.PROJECT_NAME || 'DocMCP',
+  projectVersion: process.env.PROJECT_VERSION || '0.1.0',
   server: {
     port: process.env.PORT || 3000,
     nodeEnv: process.env.NODE_ENV || 'development',

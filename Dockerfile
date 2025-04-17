@@ -39,7 +39,7 @@ RUN npm install -g pnpm && \
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/src/generated ./src/generated
+COPY --from=builder /app/src/generated ./dist/generated
 COPY --from=builder /app/prisma ./prisma
 
 # Copy healthcheck script and make it executable
@@ -57,6 +57,7 @@ RUN mkdir -p /app/logs && \
 # Create a non-root user to run the app
 RUN addgroup -S appuser && adduser -S appuser -G appuser && \
     chown -R appuser:appuser /app/logs
+RUN chown -R appuser:appuser /app
 USER appuser
 
 # Expose API port

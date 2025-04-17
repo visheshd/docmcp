@@ -1,9 +1,9 @@
-import { MCPFunction, MCPTool, MCPToolRegistry } from '../../types/mcp';
+import { z } from 'zod';
 import logger from '../../utils/logger';
 import { CrawlerService } from '../crawler.service';
 import { JobService } from '../job.service';
 import { DocumentProcessorService } from '../document-processor.service';
-import { Document, JobStatus, JobType, PrismaClient } from '../../generated/prisma';
+import { JobStatus, JobType, PrismaClient } from '../../generated/prisma';
 import { getPrismaClient as getMainPrismaClient } from '../../config/database';
 import { URL } from 'url';
 import { DocumentService } from '../document.service';
@@ -13,58 +13,29 @@ import { DocumentService } from '../document.service';
  * This tool allows adding new documentation by crawling a URL and processing it
  */
 
-// Define the tool function schema following OpenAI Function Calling format
-const addDocumentationFunction: MCPFunction = {
-  name: 'add_documentation',
-  description: 'Add new documentation to the knowledge base by crawling a URL and processing it',
-  parameters: {
-    type: 'object',
-    properties: {
-      url: {
-        type: 'string',
-        description: 'The URL of the documentation site to crawl and process'
-      },
-      maxDepth: {
-        type: 'number',
-        description: 'The maximum depth to crawl (number of links to follow from the start URL)'
-      },
-      name: {
-        type: 'string',
-        description: 'A friendly name for this documentation source'
-      },
-      tags: {
-        type: 'array',
-        items: {
-          type: 'string'
-        },
-        description: 'Tags to associate with this documentation'
-      },
-      rateLimit: {
-        type: 'number',
-        description: 'Milliseconds to wait between requests (to avoid rate limiting)'
-      },
-      respectRobotsTxt: {
-        type: 'boolean',
-        description: 'Whether to respect robots.txt directives'
-      }
-    },
-    required: ['url']
-  }
+// Define Zod schema for parameters (ZodRawShape)
+export const addDocumentationSchema = {
+  url: z.string().url().describe('The URL of the documentation site to crawl and process'),
+  maxDepth: z.number().int().positive().optional().describe('Maximum crawl depth'),
+  name: z.string().optional().describe('Friendly name for the source'),
+  tags: z.array(z.string()).optional().describe('Tags for categorization'),
+  rateLimit: z.number().int().nonnegative().optional().describe('Milliseconds between requests'),
+  respectRobotsTxt: z.boolean().optional().describe('Respect robots.txt')
 };
 
-// Input type for the handler
-interface AddDocumentationParams {
+// Explicitly define the type for the handler parameters
+// Mirroring the Zod schema + internal params
+type AddDocumentationParams = {
   url: string;
   maxDepth?: number;
   name?: string;
   tags?: string[];
   rateLimit?: number;
   respectRobotsTxt?: boolean;
-  // For testing: bypass the setTimeout
+  // Internal params
   _bypassAsync?: boolean;
-  // For testing: provide custom Prisma client
   _prisma?: PrismaClient;
-}
+};
 
 /**
  * Start the crawling process for a given URL
@@ -192,92 +163,79 @@ export async function startCrawlingProcess(jobId: string, params: AddDocumentati
   }
 }
 
-// Implement the tool handler
-const addDocumentationHandler = async (params: AddDocumentationParams) => {
+// Define the handler function matching SDK expectations
+export const addDocumentationHandler = async (params: AddDocumentationParams) => {
   logger.info(`Add documentation tool called with URL: ${params.url}`);
-  
-  // Validate URL
+
+  // Perform parameter validation (already done by Zod via SDK)
+  // try {
+  //   new URL(params.url); // URL validation handled by z.string().url()
+  // } catch (error) {
+  //   return { content: [{ type: 'text', text: `Invalid URL format: ${params.url}` }], isError: true };
+  // }
+  // (Other validations like maxDepth, rateLimit also handled by Zod)
+
   try {
-    new URL(params.url);
-  } catch (error) {
-    throw new Error(`Invalid URL format: ${params.url}`);
-  }
-  
-  // Validate maxDepth if provided
-  if (params.maxDepth !== undefined) {
-    if (!Number.isInteger(params.maxDepth) || params.maxDepth < 1) {
-      throw new Error('maxDepth must be a positive integer');
-    }
-  }
-  
-  // Validate rateLimit if provided
-  if (params.rateLimit !== undefined) {
-    if (!Number.isInteger(params.rateLimit) || params.rateLimit < 0) {
-      throw new Error('rateLimit must be a non-negative integer');
-    }
-  }
-  
-  try {
-    // Use the provided Prisma client or get the main one
     const prisma = params._prisma || getMainPrismaClient();
-    
-    // Create a job service for job tracking with the Prisma client
     const jobService = new JobService(prisma);
-    
-    // Create a job record to track the crawling process
+
+    // Create a job record
     const job = await jobService.createJob({
       url: params.url,
-      status: 'pending' as JobStatus,
+      status: JobStatus.pending, // Use enum
+      type: JobType.crawl, // Corrected field name and enum value
       startDate: new Date(),
       progress: 0,
       endDate: null,
       error: null,
-      stats: { 
-        pagesProcessed: 0, 
-        pagesSkipped: 0, 
-        totalChunks: 0 
+      stats: {
+        pagesProcessed: 0,
+        pagesSkipped: 0,
+        totalChunks: 0
       },
+      metadata: { // Store initial params in metadata
+        sourceUrl: params.url,
+        sourceName: params.name,
+        sourceTags: params.tags,
+        crawlMaxDepth: params.maxDepth,
+        crawlRateLimit: params.rateLimit,
+        crawlRespectRobotsTxt: params.respectRobotsTxt,
+      }
     });
-    
-    // Log the job creation
+
     logger.info(`Created job ${job.id} for URL ${params.url}`);
-    
-    // Start the crawling process in the background or immediately for tests
+
+    // Trigger the async processing
     if (params._bypassAsync) {
-      // For testing: run immediately
+      // For testing: run immediately and wait (useful for integration tests)
       await startCrawlingProcess(job.id, params);
     } else {
-      // In production: run in the background
-      setTimeout(() => {
-        startCrawlingProcess(job.id, params).catch(error => {
-          logger.error(`Unhandled error in background crawling process:`, error);
-        });
-      }, 0);
+      // Don't await - let it run in the background
+      startCrawlingProcess(job.id, params).catch(err => {
+        logger.error(`Unhandled error in background job ${job.id}:`, err);
+        // Optionally update job status to failed here if the catch is reliable
+      });
     }
-    
-    // Return the job information immediately
+
+    // Return success message with job ID
     return {
-      jobId: job.id,
-      url: params.url,
-      status: 'pending',
-      message: 'Documentation crawling job has been created and started in the background'
+      content: [
+        {
+          type: 'text' as const,
+          text: `Documentation source added. Processing started with Job ID: ${job.id}`
+        }
+      ]
     };
   } catch (error) {
-    logger.error('Error in add_documentation handler:', error);
-    throw error;
+    logger.error('Error creating documentation job:', error);
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: error instanceof Error ? error.message : 'Failed to start documentation job'
+        }
+      ],
+      isError: true
+    };
   }
-};
-
-// Create the MCP tool
-const addDocumentationTool: MCPTool = {
-  function: addDocumentationFunction,
-  handler: addDocumentationHandler
-};
-
-// Register the tool
-export const registerAddDocumentationTool = () => {
-  MCPToolRegistry.registerTool(addDocumentationTool);
-  logger.info('Add documentation tool registered');
-};
-
-export default addDocumentationTool; 
+}; 

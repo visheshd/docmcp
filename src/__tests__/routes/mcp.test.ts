@@ -1,99 +1,55 @@
-import request from 'supertest';
-import { app } from '../../app';
-import { registerAllTools } from '../../services/mcp-tools';
+import { z } from 'zod'; // Import Zod for potential validation tests
 
-describe('MCP Routes', () => {
-  // Register tools before tests
-  beforeAll(() => {
-    registerAllTools();
-  });
+// Import the handlers and schemas we want to test
+import { sampleToolSchema, sampleToolHandler } from '../../services/mcp-tools/sample.tool';
+// TODO: Import other handlers/schemas as needed
+// import { addDocumentationSchema, addDocumentationHandler } from '../../services/mcp-tools/add-documentation.tool';
+// import { getJobStatusSchema, getJobStatusHandler } from '../../services/mcp-tools/get-job-status.tool';
+// import { listDocumentationSchema, listDocumentationHandler } from '../../services/mcp-tools/list-documentation.tool';
+// import { queryDocumentationSchema, queryDocumentationHandler } from '../../services/mcp-tools/query-documentation.tool';
 
-  describe('GET /mcp/functions', () => {
-    it('should return a list of available functions', async () => {
-      const response = await request(app)
-        .get('/mcp/functions')
-        .expect('Content-Type', /json/)
-        .expect(200);
+describe('MCP Tool Handlers', () => {
 
-      expect(response.body.success).toBe(true);
-      expect(response.body.data).toBeDefined();
-      expect(Array.isArray(response.body.data.functions)).toBe(true);
+  describe('sampleToolHandler', () => {
+    it('should echo back the message the specified number of times', async () => {
+      const params = { message: 'test', count: 3 };
+      const expectedText = 'test test test';
       
-      // Check if our sample tool is registered
-      const sampleTool = response.body.data.functions.find(
-        (fn: any) => fn.name === 'sample_tool'
-      );
-      expect(sampleTool).toBeDefined();
-      expect(sampleTool.description).toBe('A sample tool for demonstration purposes');
+      // Directly call the handler
+      const result = await sampleToolHandler(params);
+      
+      // Assert the SDK-expected return structure
+      expect(result).toBeDefined();
+      expect(result.content).toBeDefined();
+      expect(Array.isArray(result.content)).toBe(true);
+      expect(result.content.length).toBe(1);
+      expect(result.content[0].type).toBe('text');
+      expect(result.content[0].text).toBe(expectedText);
     });
+
+    it('should echo back the message once if count is not provided', async () => {
+      const params = { message: 'hello' }; // Count omitted
+      const expectedText = 'hello';
+      
+      const result = await sampleToolHandler(params);
+      
+      expect(result.content[0].text).toBe(expectedText);
+    });
+
+    // Optional: Test schema validation separately if needed
+    // it('should validate parameters using the schema', () => {
+    //   const validParams = { message: 'valid' };
+    //   const invalidParams = { count: 3 }; // Missing required message
+    //   const schemaObject = z.object(sampleToolSchema); 
+    //   expect(() => schemaObject.parse(validParams)).not.toThrow();
+    //   expect(() => schemaObject.parse(invalidParams)).toThrow();
+    // });
   });
 
-  describe('POST /mcp/call', () => {
-    it('should execute a sample tool call successfully', async () => {
-      const response = await request(app)
-        .post('/mcp/call')
-        .send({
-          name: 'sample_tool',
-          parameters: {
-            message: 'Hello, MCP!',
-            count: 3
-          }
-        })
-        .expect('Content-Type', /json/)
-        .expect(200);
+  // TODO: Add describe blocks for other tool handlers
+  // describe('addDocumentationHandler', () => { ... });
+  // describe('getJobStatusHandler', () => { ... });
+  // describe('listDocumentationHandler', () => { ... });
+  // describe('queryDocumentationHandler', () => { ... });
 
-      expect(response.body.success).toBe(true);
-      expect(response.body.data).toBeDefined();
-      expect(response.body.data.echo).toBe('Hello, MCP! Hello, MCP! Hello, MCP!');
-      expect(response.body.data.timestamp).toBeDefined();
-    });
-
-    it('should return an error if tool name is not provided', async () => {
-      const response = await request(app)
-        .post('/mcp/call')
-        .send({
-          parameters: {
-            message: 'This should fail'
-          }
-        })
-        .expect('Content-Type', /json/)
-        .expect(400);
-
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBeDefined();
-    });
-
-    it('should return an error if required parameters are missing', async () => {
-      const response = await request(app)
-        .post('/mcp/call')
-        .send({
-          name: 'sample_tool',
-          parameters: {
-            // Missing required 'message' parameter
-            count: 2
-          }
-        })
-        .expect('Content-Type', /json/)
-        .expect(400);
-
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toContain('Missing required parameters');
-    });
-
-    it('should return an error if tool does not exist', async () => {
-      const response = await request(app)
-        .post('/mcp/call')
-        .send({
-          name: 'nonexistent_tool',
-          parameters: {
-            message: 'This should fail'
-          }
-        })
-        .expect('Content-Type', /json/)
-        .expect(404);
-
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toContain('not found');
-    });
-  });
 }); 
