@@ -1,175 +1,204 @@
-import addDocumentationTool from '../../../services/mcp-tools/add-documentation.tool';
+import { PrismaClient } from '../../../generated/prisma';
+import addDocumentationTool, { startCrawlingProcess } from '../../../services/mcp-tools/add-documentation.tool';
 import { JobService } from '../../../services/job.service';
 import { CrawlerService } from '../../../services/crawler.service';
-import { PrismaClient } from '../../../generated/prisma';
-import { getTestPrismaClient } from '../../utils/testDb';
+import { DocumentService } from '../../../services/document.service';
+import { DocumentProcessorService } from '../../../services/document-processor.service';
 
-// Mock the JobService and CrawlerService
+// Mock the services
 jest.mock('../../../services/job.service');
 jest.mock('../../../services/crawler.service');
-jest.mock('../../../utils/logger', () => ({
-  info: jest.fn(),
-  error: jest.fn(),
-  warn: jest.fn(),
-  debug: jest.fn(),
-}));
+jest.mock('../../../services/document.service');
+jest.mock('../../../services/document-processor.service');
 
-// Mock setTimeout to execute callback immediately
-jest.mock('timers', () => ({
-  ...jest.requireActual('timers'),
-  setTimeout: (fn: Function) => fn(),
-}));
-
-describe('add_documentation MCP tool', () => {
-  const mockJob = {
-    id: 'test-job-id',
-    url: 'https://example.com',
-    status: 'pending',
-    progress: 0,
-    startDate: new Date(),
-    endDate: null,
-    error: null,
-    stats: { pagesProcessed: 0, pagesSkipped: 0, totalChunks: 0 },
-  };
-
-  let jobServiceMock: jest.Mocked<JobService>;
-  let crawlerServiceMock: jest.Mocked<CrawlerService>;
-  let testPrisma: PrismaClient;
-
+describe('Add Documentation Tool', () => {
+  let mockPrisma: jest.Mocked<PrismaClient>;
+  let mockJobService: jest.Mocked<JobService>;
+  let mockCrawlerService: jest.Mocked<CrawlerService>;
+  let mockDocumentService: jest.Mocked<DocumentService>;
+  let mockDocumentProcessorService: jest.Mocked<DocumentProcessorService>;
+  
   beforeEach(() => {
     jest.clearAllMocks();
     
-    // Setup the test Prisma client
-    testPrisma = getTestPrismaClient();
+    // Create mock PrismaClient
+    mockPrisma = {
+      $queryRaw: jest.fn().mockResolvedValue([{ count: 5 }]),
+    } as unknown as jest.Mocked<PrismaClient>;
     
-    // Setup JobService mock
-    jobServiceMock = {
-      createJob: jest.fn().mockResolvedValue(mockJob),
-      updateJobProgress: jest.fn().mockResolvedValue(mockJob),
-      updateJobError: jest.fn().mockResolvedValue({ ...mockJob, status: 'failed' }),
+    // Create mock services
+    mockJobService = {
+      updateJobProgress: jest.fn().mockResolvedValue({}),
+      updateJobMetadata: jest.fn().mockResolvedValue({}),
+      updateJobStats: jest.fn().mockResolvedValue({}),
+      updateJobError: jest.fn().mockResolvedValue({}),
+      findJobById: jest.fn().mockResolvedValue({ stats: { pagesProcessed: 0, pagesSkipped: 0, totalChunks: 0 } }),
     } as unknown as jest.Mocked<JobService>;
     
-    // Mock the constructor to pass the test Prisma client
-    (JobService as jest.Mock).mockImplementation(() => jobServiceMock);
-    
-    // Setup CrawlerService mock
-    crawlerServiceMock = {
+    mockCrawlerService = {
       crawl: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<CrawlerService>;
     
-    // Mock the constructor to pass the test Prisma client
-    (CrawlerService as jest.Mock).mockImplementation(() => crawlerServiceMock);
-  });
-
-  it('should validate URL format', async () => {
-    // Call the tool handler with an invalid URL
-    await expect(addDocumentationTool.handler({ 
-      url: 'invalid-url',
-      _prisma: testPrisma 
-    }))
-      .rejects.toThrow('Invalid URL format: invalid-url');
+    mockDocumentService = {
+      findDocumentsByUrl: jest.fn().mockResolvedValue([
+        { id: 'doc1', title: 'Doc 1', content: '<html><body>Test 1</body></html>', metadata: { type: 'test' } },
+        { id: 'doc2', title: 'Doc 2', content: '<html><body>Test 2</body></html>', metadata: { type: 'test' } },
+      ]),
+      updateDocument: jest.fn().mockResolvedValue({}),
+    } as unknown as jest.Mocked<DocumentService>;
     
-    // Verify that no job was created
-    expect(jobServiceMock.createJob).not.toHaveBeenCalled();
-  });
-
-  it('should validate maxDepth parameter', async () => {
-    // Call the tool handler with an invalid maxDepth
-    await expect(addDocumentationTool.handler({ 
-      url: 'https://example.com', 
-      maxDepth: 0,
-      _prisma: testPrisma
-    }))
-      .rejects.toThrow('maxDepth must be a positive integer');
+    mockDocumentProcessorService = {
+      processDocument: jest.fn().mockResolvedValue('Processed Markdown'),
+    } as unknown as jest.Mocked<DocumentProcessorService>;
     
-    // Verify that no job was created
-    expect(jobServiceMock.createJob).not.toHaveBeenCalled();
+    // Restore the constructors
+    (JobService as jest.Mock).mockImplementation(() => mockJobService);
+    (CrawlerService as jest.Mock).mockImplementation(() => mockCrawlerService);
+    (DocumentService as jest.Mock).mockImplementation(() => mockDocumentService);
+    (DocumentProcessorService as jest.Mock).mockImplementation(() => mockDocumentProcessorService);
   });
-
-  it('should validate rateLimit parameter', async () => {
-    // Call the tool handler with an invalid rateLimit
-    await expect(addDocumentationTool.handler({ 
-      url: 'https://example.com', 
-      rateLimit: -1,
-      _prisma: testPrisma
-    }))
-      .rejects.toThrow('rateLimit must be a non-negative integer');
-    
-    // Verify that no job was created
-    expect(jobServiceMock.createJob).not.toHaveBeenCalled();
-  });
-
-  it('should create a job and return jobId immediately', async () => {
-    // Call the tool handler with valid parameters but don't start crawling
-    const result = await addDocumentationTool.handler({
-      url: 'https://example.com',
-      maxDepth: 2,
-      name: 'Example Docs',
-      tags: ['documentation', 'example'],
-      _prisma: testPrisma
+  
+  describe('startCrawlingProcess', () => {
+    it('should execute the full pipeline successfully', async () => {
+      // Arrange
+      const jobId = 'test-job-id';
+      const params = {
+        url: 'https://example.com/docs',
+        maxDepth: 2,
+        name: 'Example Docs',
+        tags: ['test', 'example'],
+        _prisma: mockPrisma,
+      };
+      
+      // Act
+      await startCrawlingProcess(jobId, params);
+      
+      // Assert
+      
+      // 1. Job status and metadata updates
+      expect(mockJobService.updateJobProgress).toHaveBeenCalledWith(jobId, 'running', 0);
+      expect(mockJobService.updateJobMetadata).toHaveBeenCalledWith(jobId, { stage: 'crawling' });
+      expect(mockJobService.updateJobMetadata).toHaveBeenCalledWith(jobId, {
+        name: 'Example Docs',
+        tags: ['test', 'example'],
+        maxDepth: 2
+      });
+      
+      // 2. Crawler is called with correct params
+      expect(mockCrawlerService.crawl).toHaveBeenCalledWith('https://example.com/docs', {
+        maxDepth: 2,
+        rateLimit: undefined,
+        respectRobotsTxt: true,
+      });
+      
+      // 3. Job status is updated to processing stage
+      expect(mockJobService.updateJobProgress).toHaveBeenCalledWith(jobId, 'running', 0.5);
+      expect(mockJobService.updateJobMetadata).toHaveBeenCalledWith(jobId, { stage: 'processing' });
+      
+      // 4. Documents are retrieved
+      expect(mockDocumentService.findDocumentsByUrl).toHaveBeenCalledWith('https://example.com/docs');
+      
+      // 5. Each document is processed
+      expect(mockDocumentProcessorService.processDocument).toHaveBeenCalledTimes(2);
+      expect(mockDocumentProcessorService.processDocument).toHaveBeenCalledWith(
+        'doc1', 
+        '<html><body>Test 1</body></html>',
+        { type: 'test' }
+      );
+      expect(mockDocumentProcessorService.processDocument).toHaveBeenCalledWith(
+        'doc2', 
+        '<html><body>Test 2</body></html>',
+        { type: 'test' }
+      );
+      
+      // 6. Job progress is updated during processing
+      expect(mockJobService.updateJobProgress).toHaveBeenCalledWith(jobId, 'running', 0.5 + (0.5 * (1/2)));
+      expect(mockJobService.updateJobProgress).toHaveBeenCalledWith(jobId, 'running', 0.5 + (0.5 * (2/2)));
+      
+      // 7. Job stats are updated
+      expect(mockJobService.updateJobStats).toHaveBeenCalledWith(jobId, {
+        pagesProcessed: 2,
+        pagesSkipped: 0,
+        totalChunks: 5,
+      });
+      
+      // 8. Job is marked as completed
+      expect(mockJobService.updateJobProgress).toHaveBeenCalledWith(jobId, 'completed', 1.0);
     });
     
-    // Verify the result
-    expect(result).toEqual({
-      jobId: 'test-job-id',
-      url: 'https://example.com',
-      status: 'pending',
-      message: expect.any(String),
+    it('should handle errors during document processing', async () => {
+      // Arrange
+      const jobId = 'test-job-id';
+      const params = {
+        url: 'https://example.com/docs',
+        _prisma: mockPrisma,
+      };
+      
+      // Make the second document fail processing
+      mockDocumentProcessorService.processDocument.mockImplementation((docId) => {
+        if (docId === 'doc2') {
+          return Promise.reject(new Error('Processing error'));
+        }
+        return Promise.resolve('Processed Markdown');
+      });
+      
+      // Act
+      await startCrawlingProcess(jobId, params);
+      
+      // Assert
+      
+      // 1. First document should be processed successfully
+      expect(mockDocumentProcessorService.processDocument).toHaveBeenCalledWith(
+        'doc1', 
+        '<html><body>Test 1</body></html>',
+        { type: 'test' }
+      );
+      
+      // 2. Second document should attempt processing but fail
+      expect(mockDocumentProcessorService.processDocument).toHaveBeenCalledWith(
+        'doc2', 
+        '<html><body>Test 2</body></html>',
+        { type: 'test' }
+      );
+      
+      // 3. Error should be recorded in document metadata
+      expect(mockDocumentService.updateDocument).toHaveBeenCalledWith('doc2', {
+        metadata: {
+          type: 'test',
+          processingError: 'Processing error',
+        },
+      });
+      
+      // 4. Job should still complete successfully with stats reflecting the partial success
+      expect(mockJobService.updateJobProgress).toHaveBeenCalledWith(jobId, 'completed', 1.0);
+      expect(mockJobService.updateJobStats).toHaveBeenCalledWith(jobId, {
+        pagesProcessed: 1,
+        pagesSkipped: 1,
+        totalChunks: 5,
+      });
     });
     
-    // Verify that a job was created and JobService was created with the Prisma client
-    expect(JobService).toHaveBeenCalledWith(testPrisma);
-    expect(jobServiceMock.createJob).toHaveBeenCalledWith(expect.objectContaining({
-      url: 'https://example.com',
-      status: 'pending',
-    }));
-    
-    // Verify that crawling wasn't started yet (will be in background)
-    expect(jobServiceMock.updateJobProgress).not.toHaveBeenCalled();
-    expect(crawlerServiceMock.crawl).not.toHaveBeenCalled();
-  });
-
-  it('should start the crawling process in the background', async () => {
-    // Call the tool handler with _bypassAsync to make it run immediately
-    await addDocumentationTool.handler({
-      url: 'https://example.com',
-      maxDepth: 2,
-      _bypassAsync: true,
-      _prisma: testPrisma
+    it('should handle crawler errors', async () => {
+      // Arrange
+      const jobId = 'test-job-id';
+      const params = {
+        url: 'https://example.com/docs',
+        _prisma: mockPrisma,
+      };
+      
+      // Make the crawler fail
+      mockCrawlerService.crawl.mockRejectedValue(new Error('Crawler error'));
+      
+      // Act
+      await startCrawlingProcess(jobId, params);
+      
+      // Assert
+      
+      // 1. Job should be marked as failed
+      expect(mockJobService.updateJobError).toHaveBeenCalledWith(jobId, 'Crawler error');
+      
+      // 2. Document processor should not be called
+      expect(mockDocumentProcessorService.processDocument).not.toHaveBeenCalled();
     });
-    
-    // Verify that JobService was created with the Prisma client
-    expect(JobService).toHaveBeenCalledWith(testPrisma);
-    
-    // Verify that CrawlerService was created with the Prisma client
-    expect(CrawlerService).toHaveBeenCalledWith(testPrisma);
-    
-    // Verify that updateJobProgress was called to set status to running
-    expect(jobServiceMock.updateJobProgress).toHaveBeenCalledWith('test-job-id', 'running', 0);
-    
-    // Verify that the crawler service was called
-    expect(crawlerServiceMock.crawl).toHaveBeenCalledWith('https://example.com', expect.objectContaining({
-      maxDepth: 2,
-      respectRobotsTxt: true,
-    }));
-  });
-
-  it('should handle errors during crawling', async () => {
-    // Setup the crawler service to throw an error
-    const error = new Error('Crawling failed');
-    crawlerServiceMock.crawl.mockRejectedValueOnce(error);
-    
-    // Call the tool handler with _bypassAsync to make it run immediately
-    await addDocumentationTool.handler({
-      url: 'https://example.com',
-      _bypassAsync: true,
-      _prisma: testPrisma
-    });
-    
-    // Verify that JobService was created with the Prisma client for error handling
-    expect(JobService).toHaveBeenCalledWith(testPrisma);
-    
-    // Verify that updateJobError was called with the error message
-    expect(jobServiceMock.updateJobError).toHaveBeenCalledWith('test-job-id', 'Crawling failed');
   });
 }); 

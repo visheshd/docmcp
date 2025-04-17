@@ -2,9 +2,11 @@ import { MCPFunction, MCPTool, MCPToolRegistry } from '../../types/mcp';
 import logger from '../../utils/logger';
 import { CrawlerService } from '../crawler.service';
 import { JobService } from '../job.service';
-import { URL } from 'url';
-import { JobStatus, PrismaClient } from '../../generated/prisma';
+import { DocumentProcessorService } from '../document-processor.service';
+import { Document, JobStatus, JobType, PrismaClient } from '../../generated/prisma';
 import { getPrismaClient as getMainPrismaClient } from '../../config/database';
+import { URL } from 'url';
+import { DocumentService } from '../document.service';
 
 /**
  * Add Documentation MCP tool implementation
@@ -75,9 +77,12 @@ export async function startCrawlingProcess(jobId: string, params: AddDocumentati
     
     // Initialize services with the Prisma client
     const jobService = new JobService(prisma);
+    const documentService = new DocumentService(prisma);
+    const documentProcessorService = new DocumentProcessorService(prisma);
     
     // Update job status to running
     await jobService.updateJobProgress(jobId, 'running', 0);
+    await jobService.updateJobMetadata(jobId, { stage: 'crawling' });
     
     // Initialize crawler service with the same Prisma client
     const crawlerService = new CrawlerService(prisma);
@@ -86,23 +91,98 @@ export async function startCrawlingProcess(jobId: string, params: AddDocumentati
     const docName = params.name || new URL(params.url).hostname;
     const docTags = params.tags || ['auto-added'];
     
+    // Update job with metadata
+    await jobService.updateJobMetadata(jobId, {
+      name: docName,
+      tags: docTags,
+      maxDepth: params.maxDepth || 3
+    });
+    
+    logger.info(`Starting crawl process for job ${jobId} at URL ${params.url}`);
+    
     // Start crawling with the provided options
     await crawlerService.crawl(params.url, {
       maxDepth: params.maxDepth || 3,
       rateLimit: params.rateLimit,
       respectRobotsTxt: params.respectRobotsTxt !== false, // Default to true if not specified
-      // Note: The CrawlerService.crawl method itself doesn't accept metadata directly
-      // We'll need to enhance the crawler service later if we want to pass this information
     });
     
-    // Job completion is handled within the crawler service
-    logger.info(`Crawling completed for job ${jobId}`);
+    // Crawl is complete, now update job status to processing stage
+    await jobService.updateJobProgress(jobId, 'running', 0.5);
+    await jobService.updateJobMetadata(jobId, { stage: 'processing' });
+    logger.info(`Crawling completed for job ${jobId}, starting document processing`);
+    
+    // Get all documents created by the crawler for this URL
+    const documents = await documentService.findDocumentsByUrl(params.url);
+    logger.info(`Found ${documents.length} documents to process for job ${jobId}`);
+    
+    // Process each document (convert HTML to markdown, chunk, create embeddings)
+    const totalDocs = documents.length;
+    let processedDocs = 0;
+    
+    for (const document of documents) {
+      try {
+        logger.info(`Processing document ${document.id} (${document.title}) for job ${jobId}`);
+        
+        // Process the document HTML and generate embeddings
+        await documentProcessorService.processDocument(document.id, document.content, document.metadata);
+        
+        // Update job progress
+        processedDocs++;
+        const progress = 0.5 + (0.5 * (processedDocs / totalDocs));
+        await jobService.updateJobProgress(jobId, 'running', progress);
+        
+        // Update job stats
+        const currentStats = (await jobService.findJobById(jobId))?.stats as Record<string, number>;
+        await jobService.updateJobStats(jobId, {
+          ...currentStats,
+          pagesProcessed: processedDocs,
+          pagesSkipped: 0,
+          totalChunks: processedDocs, // This will be refined later with actual chunk count
+        });
+        
+        logger.info(`Successfully processed document ${document.id} for job ${jobId}`);
+      } catch (error) {
+        logger.error(`Error processing document ${document.id} for job ${jobId}:`, error);
+        
+        // Update document to mark it as having processing errors
+        await documentService.updateDocument(document.id, {
+          metadata: {
+            ...document.metadata as Record<string, any>,
+            processingError: error instanceof Error ? error.message : 'Unknown error during processing',
+          },
+        });
+        
+        // Continue with other documents despite the error
+      }
+    }
+    
+    // Get the actual number of chunks created
+    const stats = await prisma.$queryRaw<[{ count: number }]>`
+      SELECT COUNT(*) as count FROM chunks c
+      INNER JOIN documents d ON d.id = c.document_id
+      WHERE d.url = ${params.url}
+    `;
+    
+    const chunkCount = stats[0]?.count || processedDocs;
+    
+    // Mark job as completed
+    await jobService.updateJobProgress(jobId, 'completed', 1.0);
+    await jobService.updateJobStats(jobId, {
+      pagesProcessed: processedDocs,
+      pagesSkipped: totalDocs - processedDocs,
+      totalChunks: Number(chunkCount),
+    });
+    
+    logger.info(`Document processing and embedding generation completed for job ${jobId}`);
+    logger.info(`Job statistics: ${processedDocs} documents processed, ${chunkCount} chunks created`);
+    
   } catch (error) {
-    logger.error(`Error during crawling job ${jobId}:`, error);
+    logger.error(`Error during job ${jobId}:`, error);
     // Update job with error status
     const prisma = params._prisma || getMainPrismaClient();
     const jobService = new JobService(prisma);
-    await jobService.updateJobError(jobId, error instanceof Error ? error.message : 'Unknown error during crawling');
+    await jobService.updateJobError(jobId, error instanceof Error ? error.message : 'Unknown error during processing');
   }
 }
 

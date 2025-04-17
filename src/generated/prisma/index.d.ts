@@ -778,18 +778,6 @@ export namespace Prisma {
             args: Prisma.ChunkFindManyArgs<ExtArgs>
             result: $Utils.PayloadToResult<Prisma.$ChunkPayload>[]
           }
-          create: {
-            args: Prisma.ChunkCreateArgs<ExtArgs>
-            result: $Utils.PayloadToResult<Prisma.$ChunkPayload>
-          }
-          createMany: {
-            args: Prisma.ChunkCreateManyArgs<ExtArgs>
-            result: BatchPayload
-          }
-          createManyAndReturn: {
-            args: Prisma.ChunkCreateManyAndReturnArgs<ExtArgs>
-            result: $Utils.PayloadToResult<Prisma.$ChunkPayload>[]
-          }
           delete: {
             args: Prisma.ChunkDeleteArgs<ExtArgs>
             result: $Utils.PayloadToResult<Prisma.$ChunkPayload>
@@ -809,10 +797,6 @@ export namespace Prisma {
           updateManyAndReturn: {
             args: Prisma.ChunkUpdateManyAndReturnArgs<ExtArgs>
             result: $Utils.PayloadToResult<Prisma.$ChunkPayload>[]
-          }
-          upsert: {
-            args: Prisma.ChunkUpsertArgs<ExtArgs>
-            result: $Utils.PayloadToResult<Prisma.$ChunkPayload>
           }
           aggregate: {
             args: Prisma.ChunkAggregateArgs<ExtArgs>
@@ -2358,18 +2342,8 @@ export namespace Prisma {
 
   export type AggregateChunk = {
     _count: ChunkCountAggregateOutputType | null
-    _avg: ChunkAvgAggregateOutputType | null
-    _sum: ChunkSumAggregateOutputType | null
     _min: ChunkMinAggregateOutputType | null
     _max: ChunkMaxAggregateOutputType | null
-  }
-
-  export type ChunkAvgAggregateOutputType = {
-    embedding: number | null
-  }
-
-  export type ChunkSumAggregateOutputType = {
-    embedding: number[]
   }
 
   export type ChunkMinAggregateOutputType = {
@@ -2392,21 +2366,12 @@ export namespace Prisma {
     id: number
     documentId: number
     content: number
-    embedding: number
     metadata: number
     createdAt: number
     updatedAt: number
     _all: number
   }
 
-
-  export type ChunkAvgAggregateInputType = {
-    embedding?: true
-  }
-
-  export type ChunkSumAggregateInputType = {
-    embedding?: true
-  }
 
   export type ChunkMinAggregateInputType = {
     id?: true
@@ -2428,7 +2393,6 @@ export namespace Prisma {
     id?: true
     documentId?: true
     content?: true
-    embedding?: true
     metadata?: true
     createdAt?: true
     updatedAt?: true
@@ -2473,18 +2437,6 @@ export namespace Prisma {
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
-     * Select which fields to average
-    **/
-    _avg?: ChunkAvgAggregateInputType
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-     * 
-     * Select which fields to sum
-    **/
-    _sum?: ChunkSumAggregateInputType
-    /**
-     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
-     * 
      * Select which fields to find the minimum value
     **/
     _min?: ChunkMinAggregateInputType
@@ -2515,8 +2467,6 @@ export namespace Prisma {
     take?: number
     skip?: number
     _count?: ChunkCountAggregateInputType | true
-    _avg?: ChunkAvgAggregateInputType
-    _sum?: ChunkSumAggregateInputType
     _min?: ChunkMinAggregateInputType
     _max?: ChunkMaxAggregateInputType
   }
@@ -2525,13 +2475,10 @@ export namespace Prisma {
     id: string
     documentId: string
     content: string
-    embedding: number[]
     metadata: JsonValue
     createdAt: Date
     updatedAt: Date
     _count: ChunkCountAggregateOutputType | null
-    _avg: ChunkAvgAggregateOutputType | null
-    _sum: ChunkSumAggregateOutputType | null
     _min: ChunkMinAggregateOutputType | null
     _max: ChunkMaxAggregateOutputType | null
   }
@@ -2554,29 +2501,17 @@ export namespace Prisma {
     id?: boolean
     documentId?: boolean
     content?: boolean
-    embedding?: boolean
     metadata?: boolean
     createdAt?: boolean
     updatedAt?: boolean
     document?: boolean | DocumentDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["chunk"]>
 
-  export type ChunkSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
-    id?: boolean
-    documentId?: boolean
-    content?: boolean
-    embedding?: boolean
-    metadata?: boolean
-    createdAt?: boolean
-    updatedAt?: boolean
-    document?: boolean | DocumentDefaultArgs<ExtArgs>
-  }, ExtArgs["result"]["chunk"]>
 
   export type ChunkSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     documentId?: boolean
     content?: boolean
-    embedding?: boolean
     metadata?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -2587,17 +2522,13 @@ export namespace Prisma {
     id?: boolean
     documentId?: boolean
     content?: boolean
-    embedding?: boolean
     metadata?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type ChunkOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "documentId" | "content" | "embedding" | "metadata" | "createdAt" | "updatedAt", ExtArgs["result"]["chunk"]>
+  export type ChunkOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "documentId" | "content" | "metadata" | "createdAt" | "updatedAt", ExtArgs["result"]["chunk"]>
   export type ChunkInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    document?: boolean | DocumentDefaultArgs<ExtArgs>
-  }
-  export type ChunkIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     document?: boolean | DocumentDefaultArgs<ExtArgs>
   }
   export type ChunkIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -2613,7 +2544,6 @@ export namespace Prisma {
       id: string
       documentId: string
       content: string
-      embedding: number[]
       metadata: Prisma.JsonValue
       createdAt: Date
       updatedAt: Date
@@ -2705,58 +2635,6 @@ export namespace Prisma {
      * 
      */
     findMany<T extends ChunkFindManyArgs>(args?: SelectSubset<T, ChunkFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ChunkPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
-
-    /**
-     * Create a Chunk.
-     * @param {ChunkCreateArgs} args - Arguments to create a Chunk.
-     * @example
-     * // Create one Chunk
-     * const Chunk = await prisma.chunk.create({
-     *   data: {
-     *     // ... data to create a Chunk
-     *   }
-     * })
-     * 
-     */
-    create<T extends ChunkCreateArgs>(args: SelectSubset<T, ChunkCreateArgs<ExtArgs>>): Prisma__ChunkClient<$Result.GetResult<Prisma.$ChunkPayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
-
-    /**
-     * Create many Chunks.
-     * @param {ChunkCreateManyArgs} args - Arguments to create many Chunks.
-     * @example
-     * // Create many Chunks
-     * const chunk = await prisma.chunk.createMany({
-     *   data: [
-     *     // ... provide data here
-     *   ]
-     * })
-     *     
-     */
-    createMany<T extends ChunkCreateManyArgs>(args?: SelectSubset<T, ChunkCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
-
-    /**
-     * Create many Chunks and returns the data saved in the database.
-     * @param {ChunkCreateManyAndReturnArgs} args - Arguments to create many Chunks.
-     * @example
-     * // Create many Chunks
-     * const chunk = await prisma.chunk.createManyAndReturn({
-     *   data: [
-     *     // ... provide data here
-     *   ]
-     * })
-     * 
-     * // Create many Chunks and only return the `id`
-     * const chunkWithIdOnly = await prisma.chunk.createManyAndReturn({
-     *   select: { id: true },
-     *   data: [
-     *     // ... provide data here
-     *   ]
-     * })
-     * Note, that providing `undefined` is treated as the value not being there.
-     * Read more here: https://pris.ly/d/null-undefined
-     * 
-     */
-    createManyAndReturn<T extends ChunkCreateManyAndReturnArgs>(args?: SelectSubset<T, ChunkCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ChunkPayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
 
     /**
      * Delete a Chunk.
@@ -2851,25 +2729,6 @@ export namespace Prisma {
      * 
      */
     updateManyAndReturn<T extends ChunkUpdateManyAndReturnArgs>(args: SelectSubset<T, ChunkUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ChunkPayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
-
-    /**
-     * Create or update one Chunk.
-     * @param {ChunkUpsertArgs} args - Arguments to update or create a Chunk.
-     * @example
-     * // Update or create a Chunk
-     * const chunk = await prisma.chunk.upsert({
-     *   create: {
-     *     // ... data to create a Chunk
-     *   },
-     *   update: {
-     *     // ... in case it already exists, update
-     *   },
-     *   where: {
-     *     // ... the filter for the Chunk we want to update
-     *   }
-     * })
-     */
-    upsert<T extends ChunkUpsertArgs>(args: SelectSubset<T, ChunkUpsertArgs<ExtArgs>>): Prisma__ChunkClient<$Result.GetResult<Prisma.$ChunkPayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
 
 
     /**
@@ -3044,7 +2903,6 @@ export namespace Prisma {
     readonly id: FieldRef<"Chunk", 'String'>
     readonly documentId: FieldRef<"Chunk", 'String'>
     readonly content: FieldRef<"Chunk", 'String'>
-    readonly embedding: FieldRef<"Chunk", 'Float[]'>
     readonly metadata: FieldRef<"Chunk", 'Json'>
     readonly createdAt: FieldRef<"Chunk", 'DateTime'>
     readonly updatedAt: FieldRef<"Chunk", 'DateTime'>
@@ -3248,62 +3106,6 @@ export namespace Prisma {
   }
 
   /**
-   * Chunk create
-   */
-  export type ChunkCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the Chunk
-     */
-    select?: ChunkSelect<ExtArgs> | null
-    /**
-     * Omit specific fields from the Chunk
-     */
-    omit?: ChunkOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: ChunkInclude<ExtArgs> | null
-    /**
-     * The data needed to create a Chunk.
-     */
-    data: XOR<ChunkCreateInput, ChunkUncheckedCreateInput>
-  }
-
-  /**
-   * Chunk createMany
-   */
-  export type ChunkCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * The data used to create many Chunks.
-     */
-    data: ChunkCreateManyInput | ChunkCreateManyInput[]
-    skipDuplicates?: boolean
-  }
-
-  /**
-   * Chunk createManyAndReturn
-   */
-  export type ChunkCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the Chunk
-     */
-    select?: ChunkSelectCreateManyAndReturn<ExtArgs> | null
-    /**
-     * Omit specific fields from the Chunk
-     */
-    omit?: ChunkOmit<ExtArgs> | null
-    /**
-     * The data used to create many Chunks.
-     */
-    data: ChunkCreateManyInput | ChunkCreateManyInput[]
-    skipDuplicates?: boolean
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: ChunkIncludeCreateManyAndReturn<ExtArgs> | null
-  }
-
-  /**
    * Chunk update
    */
   export type ChunkUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -3375,36 +3177,6 @@ export namespace Prisma {
      * Choose, which related nodes to fetch as well
      */
     include?: ChunkIncludeUpdateManyAndReturn<ExtArgs> | null
-  }
-
-  /**
-   * Chunk upsert
-   */
-  export type ChunkUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the Chunk
-     */
-    select?: ChunkSelect<ExtArgs> | null
-    /**
-     * Omit specific fields from the Chunk
-     */
-    omit?: ChunkOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: ChunkInclude<ExtArgs> | null
-    /**
-     * The filter to search for the Chunk to update in case it exists.
-     */
-    where: ChunkWhereUniqueInput
-    /**
-     * In case the Chunk found by the `where` argument doesn't exist, create a new Chunk with this data.
-     */
-    create: XOR<ChunkCreateInput, ChunkUncheckedCreateInput>
-    /**
-     * In case the Chunk was found with the provided `where` argument, update it with this data.
-     */
-    update: XOR<ChunkUpdateInput, ChunkUncheckedUpdateInput>
   }
 
   /**
@@ -4647,7 +4419,6 @@ export namespace Prisma {
     id: 'id',
     documentId: 'documentId',
     content: 'content',
-    embedding: 'embedding',
     metadata: 'metadata',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
@@ -4787,20 +4558,6 @@ export namespace Prisma {
 
 
   /**
-   * Reference to a field of type 'Float[]'
-   */
-  export type ListFloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float[]'>
-    
-
-
-  /**
-   * Reference to a field of type 'Float'
-   */
-  export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>
-    
-
-
-  /**
    * Reference to a field of type 'JobStatus'
    */
   export type EnumJobStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'JobStatus'>
@@ -4825,6 +4582,20 @@ export namespace Prisma {
    * Reference to a field of type 'JobType[]'
    */
   export type ListEnumJobTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'JobType[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'Float'
+   */
+  export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>
+    
+
+
+  /**
+   * Reference to a field of type 'Float[]'
+   */
+  export type ListFloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float[]'>
     
   /**
    * Deep Input Types
@@ -4926,7 +4697,6 @@ export namespace Prisma {
     id?: StringFilter<"Chunk"> | string
     documentId?: StringFilter<"Chunk"> | string
     content?: StringFilter<"Chunk"> | string
-    embedding?: FloatNullableListFilter<"Chunk">
     metadata?: JsonFilter<"Chunk">
     createdAt?: DateTimeFilter<"Chunk"> | Date | string
     updatedAt?: DateTimeFilter<"Chunk"> | Date | string
@@ -4937,7 +4707,6 @@ export namespace Prisma {
     id?: SortOrder
     documentId?: SortOrder
     content?: SortOrder
-    embedding?: SortOrder
     metadata?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -4951,7 +4720,6 @@ export namespace Prisma {
     NOT?: ChunkWhereInput | ChunkWhereInput[]
     documentId?: StringFilter<"Chunk"> | string
     content?: StringFilter<"Chunk"> | string
-    embedding?: FloatNullableListFilter<"Chunk">
     metadata?: JsonFilter<"Chunk">
     createdAt?: DateTimeFilter<"Chunk"> | Date | string
     updatedAt?: DateTimeFilter<"Chunk"> | Date | string
@@ -4962,15 +4730,12 @@ export namespace Prisma {
     id?: SortOrder
     documentId?: SortOrder
     content?: SortOrder
-    embedding?: SortOrder
     metadata?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: ChunkCountOrderByAggregateInput
-    _avg?: ChunkAvgOrderByAggregateInput
     _max?: ChunkMaxOrderByAggregateInput
     _min?: ChunkMinOrderByAggregateInput
-    _sum?: ChunkSumOrderByAggregateInput
   }
 
   export type ChunkScalarWhereWithAggregatesInput = {
@@ -4980,7 +4745,6 @@ export namespace Prisma {
     id?: StringWithAggregatesFilter<"Chunk"> | string
     documentId?: StringWithAggregatesFilter<"Chunk"> | string
     content?: StringWithAggregatesFilter<"Chunk"> | string
-    embedding?: FloatNullableListFilter<"Chunk">
     metadata?: JsonWithAggregatesFilter<"Chunk">
     createdAt?: DateTimeWithAggregatesFilter<"Chunk"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Chunk"> | Date | string
@@ -5188,30 +4952,9 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
-  export type ChunkCreateInput = {
-    id?: string
-    content: string
-    embedding?: ChunkCreateembeddingInput | number[]
-    metadata: JsonNullValueInput | InputJsonValue
-    createdAt?: Date | string
-    updatedAt?: Date | string
-    document: DocumentCreateNestedOneWithoutChunksInput
-  }
-
-  export type ChunkUncheckedCreateInput = {
-    id?: string
-    documentId: string
-    content: string
-    embedding?: ChunkCreateembeddingInput | number[]
-    metadata: JsonNullValueInput | InputJsonValue
-    createdAt?: Date | string
-    updatedAt?: Date | string
-  }
-
   export type ChunkUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
     content?: StringFieldUpdateOperationsInput | string
-    embedding?: ChunkUpdateembeddingInput | number[]
     metadata?: JsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -5222,26 +4965,14 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     documentId?: StringFieldUpdateOperationsInput | string
     content?: StringFieldUpdateOperationsInput | string
-    embedding?: ChunkUpdateembeddingInput | number[]
     metadata?: JsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
-  export type ChunkCreateManyInput = {
-    id?: string
-    documentId: string
-    content: string
-    embedding?: ChunkCreateembeddingInput | number[]
-    metadata: JsonNullValueInput | InputJsonValue
-    createdAt?: Date | string
-    updatedAt?: Date | string
-  }
-
   export type ChunkUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
     content?: StringFieldUpdateOperationsInput | string
-    embedding?: ChunkUpdateembeddingInput | number[]
     metadata?: JsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -5251,7 +4982,6 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     documentId?: StringFieldUpdateOperationsInput | string
     content?: StringFieldUpdateOperationsInput | string
-    embedding?: ChunkUpdateembeddingInput | number[]
     metadata?: JsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -5625,14 +5355,6 @@ export namespace Prisma {
     _max?: NestedStringNullableFilter<$PrismaModel>
   }
 
-  export type FloatNullableListFilter<$PrismaModel = never> = {
-    equals?: number[] | ListFloatFieldRefInput<$PrismaModel> | null
-    has?: number | FloatFieldRefInput<$PrismaModel> | null
-    hasEvery?: number[] | ListFloatFieldRefInput<$PrismaModel>
-    hasSome?: number[] | ListFloatFieldRefInput<$PrismaModel>
-    isEmpty?: boolean
-  }
-
   export type DocumentScalarRelationFilter = {
     is?: DocumentWhereInput
     isNot?: DocumentWhereInput
@@ -5642,14 +5364,9 @@ export namespace Prisma {
     id?: SortOrder
     documentId?: SortOrder
     content?: SortOrder
-    embedding?: SortOrder
     metadata?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
-  }
-
-  export type ChunkAvgOrderByAggregateInput = {
-    embedding?: SortOrder
   }
 
   export type ChunkMaxOrderByAggregateInput = {
@@ -5666,10 +5383,6 @@ export namespace Prisma {
     content?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
-  }
-
-  export type ChunkSumOrderByAggregateInput = {
-    embedding?: SortOrder
   }
 
   export type EnumJobStatusFilter<$PrismaModel = never> = {
@@ -5914,9 +5627,6 @@ export namespace Prisma {
   }
 
   export type ChunkCreateNestedManyWithoutDocumentInput = {
-    create?: XOR<ChunkCreateWithoutDocumentInput, ChunkUncheckedCreateWithoutDocumentInput> | ChunkCreateWithoutDocumentInput[] | ChunkUncheckedCreateWithoutDocumentInput[]
-    connectOrCreate?: ChunkCreateOrConnectWithoutDocumentInput | ChunkCreateOrConnectWithoutDocumentInput[]
-    createMany?: ChunkCreateManyDocumentInputEnvelope
     connect?: ChunkWhereUniqueInput | ChunkWhereUniqueInput[]
   }
 
@@ -5928,9 +5638,6 @@ export namespace Prisma {
   }
 
   export type ChunkUncheckedCreateNestedManyWithoutDocumentInput = {
-    create?: XOR<ChunkCreateWithoutDocumentInput, ChunkUncheckedCreateWithoutDocumentInput> | ChunkCreateWithoutDocumentInput[] | ChunkUncheckedCreateWithoutDocumentInput[]
-    connectOrCreate?: ChunkCreateOrConnectWithoutDocumentInput | ChunkCreateOrConnectWithoutDocumentInput[]
-    createMany?: ChunkCreateManyDocumentInputEnvelope
     connect?: ChunkWhereUniqueInput | ChunkWhereUniqueInput[]
   }
 
@@ -5975,10 +5682,6 @@ export namespace Prisma {
   }
 
   export type ChunkUpdateManyWithoutDocumentNestedInput = {
-    create?: XOR<ChunkCreateWithoutDocumentInput, ChunkUncheckedCreateWithoutDocumentInput> | ChunkCreateWithoutDocumentInput[] | ChunkUncheckedCreateWithoutDocumentInput[]
-    connectOrCreate?: ChunkCreateOrConnectWithoutDocumentInput | ChunkCreateOrConnectWithoutDocumentInput[]
-    upsert?: ChunkUpsertWithWhereUniqueWithoutDocumentInput | ChunkUpsertWithWhereUniqueWithoutDocumentInput[]
-    createMany?: ChunkCreateManyDocumentInputEnvelope
     set?: ChunkWhereUniqueInput | ChunkWhereUniqueInput[]
     disconnect?: ChunkWhereUniqueInput | ChunkWhereUniqueInput[]
     delete?: ChunkWhereUniqueInput | ChunkWhereUniqueInput[]
@@ -6007,10 +5710,6 @@ export namespace Prisma {
   }
 
   export type ChunkUncheckedUpdateManyWithoutDocumentNestedInput = {
-    create?: XOR<ChunkCreateWithoutDocumentInput, ChunkUncheckedCreateWithoutDocumentInput> | ChunkCreateWithoutDocumentInput[] | ChunkUncheckedCreateWithoutDocumentInput[]
-    connectOrCreate?: ChunkCreateOrConnectWithoutDocumentInput | ChunkCreateOrConnectWithoutDocumentInput[]
-    upsert?: ChunkUpsertWithWhereUniqueWithoutDocumentInput | ChunkUpsertWithWhereUniqueWithoutDocumentInput[]
-    createMany?: ChunkCreateManyDocumentInputEnvelope
     set?: ChunkWhereUniqueInput | ChunkWhereUniqueInput[]
     disconnect?: ChunkWhereUniqueInput | ChunkWhereUniqueInput[]
     delete?: ChunkWhereUniqueInput | ChunkWhereUniqueInput[]
@@ -6018,21 +5717,6 @@ export namespace Prisma {
     update?: ChunkUpdateWithWhereUniqueWithoutDocumentInput | ChunkUpdateWithWhereUniqueWithoutDocumentInput[]
     updateMany?: ChunkUpdateManyWithWhereWithoutDocumentInput | ChunkUpdateManyWithWhereWithoutDocumentInput[]
     deleteMany?: ChunkScalarWhereInput | ChunkScalarWhereInput[]
-  }
-
-  export type ChunkCreateembeddingInput = {
-    set: number[]
-  }
-
-  export type DocumentCreateNestedOneWithoutChunksInput = {
-    create?: XOR<DocumentCreateWithoutChunksInput, DocumentUncheckedCreateWithoutChunksInput>
-    connectOrCreate?: DocumentCreateOrConnectWithoutChunksInput
-    connect?: DocumentWhereUniqueInput
-  }
-
-  export type ChunkUpdateembeddingInput = {
-    set?: number[]
-    push?: number | number[]
   }
 
   export type DocumentUpdateOneRequiredWithoutChunksNestedInput = {
@@ -6435,34 +6119,6 @@ export namespace Prisma {
     skipDuplicates?: boolean
   }
 
-  export type ChunkCreateWithoutDocumentInput = {
-    id?: string
-    content: string
-    embedding?: ChunkCreateembeddingInput | number[]
-    metadata: JsonNullValueInput | InputJsonValue
-    createdAt?: Date | string
-    updatedAt?: Date | string
-  }
-
-  export type ChunkUncheckedCreateWithoutDocumentInput = {
-    id?: string
-    content: string
-    embedding?: ChunkCreateembeddingInput | number[]
-    metadata: JsonNullValueInput | InputJsonValue
-    createdAt?: Date | string
-    updatedAt?: Date | string
-  }
-
-  export type ChunkCreateOrConnectWithoutDocumentInput = {
-    where: ChunkWhereUniqueInput
-    create: XOR<ChunkCreateWithoutDocumentInput, ChunkUncheckedCreateWithoutDocumentInput>
-  }
-
-  export type ChunkCreateManyDocumentInputEnvelope = {
-    data: ChunkCreateManyDocumentInput | ChunkCreateManyDocumentInput[]
-    skipDuplicates?: boolean
-  }
-
   export type DocumentUpsertWithoutChildDocumentsInput = {
     update: XOR<DocumentUpdateWithoutChildDocumentsInput, DocumentUncheckedUpdateWithoutChildDocumentsInput>
     create: XOR<DocumentCreateWithoutChildDocumentsInput, DocumentUncheckedCreateWithoutChildDocumentsInput>
@@ -6534,12 +6190,6 @@ export namespace Prisma {
     updatedAt?: DateTimeFilter<"Document"> | Date | string
   }
 
-  export type ChunkUpsertWithWhereUniqueWithoutDocumentInput = {
-    where: ChunkWhereUniqueInput
-    update: XOR<ChunkUpdateWithoutDocumentInput, ChunkUncheckedUpdateWithoutDocumentInput>
-    create: XOR<ChunkCreateWithoutDocumentInput, ChunkUncheckedCreateWithoutDocumentInput>
-  }
-
   export type ChunkUpdateWithWhereUniqueWithoutDocumentInput = {
     where: ChunkWhereUniqueInput
     data: XOR<ChunkUpdateWithoutDocumentInput, ChunkUncheckedUpdateWithoutDocumentInput>
@@ -6557,7 +6207,6 @@ export namespace Prisma {
     id?: StringFilter<"Chunk"> | string
     documentId?: StringFilter<"Chunk"> | string
     content?: StringFilter<"Chunk"> | string
-    embedding?: FloatNullableListFilter<"Chunk">
     metadata?: JsonFilter<"Chunk">
     createdAt?: DateTimeFilter<"Chunk"> | Date | string
     updatedAt?: DateTimeFilter<"Chunk"> | Date | string
@@ -6647,15 +6296,6 @@ export namespace Prisma {
     updatedAt?: Date | string
   }
 
-  export type ChunkCreateManyDocumentInput = {
-    id?: string
-    content: string
-    embedding?: ChunkCreateembeddingInput | number[]
-    metadata: JsonNullValueInput | InputJsonValue
-    createdAt?: Date | string
-    updatedAt?: Date | string
-  }
-
   export type DocumentUpdateWithoutParentDocumentInput = {
     id?: StringFieldUpdateOperationsInput | string
     url?: StringFieldUpdateOperationsInput | string
@@ -6699,7 +6339,6 @@ export namespace Prisma {
   export type ChunkUpdateWithoutDocumentInput = {
     id?: StringFieldUpdateOperationsInput | string
     content?: StringFieldUpdateOperationsInput | string
-    embedding?: ChunkUpdateembeddingInput | number[]
     metadata?: JsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -6708,7 +6347,6 @@ export namespace Prisma {
   export type ChunkUncheckedUpdateWithoutDocumentInput = {
     id?: StringFieldUpdateOperationsInput | string
     content?: StringFieldUpdateOperationsInput | string
-    embedding?: ChunkUpdateembeddingInput | number[]
     metadata?: JsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -6717,7 +6355,6 @@ export namespace Prisma {
   export type ChunkUncheckedUpdateManyWithoutDocumentInput = {
     id?: StringFieldUpdateOperationsInput | string
     content?: StringFieldUpdateOperationsInput | string
-    embedding?: ChunkUpdateembeddingInput | number[]
     metadata?: JsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
