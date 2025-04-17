@@ -4,19 +4,21 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - NODE_ENV=production
     ports:
       - "1337:1337"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/docmcp
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/docmcp
       - PORT=1337
       - LOG_LEVEL=info
-      - CORS_ORIGIN=*
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
-      - ./logs:/app/logs
+      - app_logs:/app/logs
       - app_data:/app/data
     logging:
       driver: "json-file"
@@ -30,15 +32,24 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
+    # Production-specific optimizations
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   postgres:
     image: ankane/pgvector:latest
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: docmcp
     ports:
-      - "5433:5432"  # Using 5433 to avoid conflict with existing PostgreSQL
+      - "${POSTGRES_PORT:-5433}:5432"  # Using 5433 to avoid conflict with existing PostgreSQL
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-scripts:/docker-entrypoint-initdb.d
@@ -54,9 +65,20 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+    # Production-specific optimizations
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
 volumes:
   postgres_data:
+    driver: local
+  app_logs:
     driver: local
   app_data:
     driver: local 

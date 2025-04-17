@@ -194,6 +194,22 @@ docker-compose logs -f app
 docker-compose logs -f postgres
 ```
 
+## Integrating with AI Agents (like Cursor)
+
+Once the DocMCP service is running via Docker (using `./docker-start.sh` or `./docker-start-prod.sh`), the MCP API endpoint is available for integration with AI agents.
+
+**Endpoint:**
+
+*   The default API endpoint exposed by the Docker setup is: `http://localhost:1337/mcp`
+
+**Usage:**
+
+1.  **Start DocMCP:** Ensure the Docker containers are running.
+2.  **Configure Agent:** Configure your AI agent (like Cursor) to use `http://localhost:1337/mcp` as the base URL for accessing DocMCP's tools.
+3.  **Use Tools:** The agent can now make POST requests to this endpoint to call the available MCP tools (e.g., `add_documentation`, `query_documentation`, `list_documentation`, `get_job_status`) as described in the "Available MCP Tools" section.
+
+**Note:** If your AI agent is running on a different machine or within a different Docker network than the DocMCP containers, replace `localhost` with the appropriate IP address or hostname of the machine running the DocMCP Docker containers. Ensure any necessary firewall rules are adjusted to allow connectivity.
+
 ## Adding Documentation
 
 Add documentation by providing a URL:
