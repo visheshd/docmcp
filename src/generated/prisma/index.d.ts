@@ -42,11 +42,24 @@ export namespace $Enums {
 
 export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus]
 
+
+export const JobType: {
+  crawl: 'crawl',
+  process: 'process',
+  delete: 'delete'
+};
+
+export type JobType = (typeof JobType)[keyof typeof JobType]
+
 }
 
 export type JobStatus = $Enums.JobStatus
 
 export const JobStatus: typeof $Enums.JobStatus
+
+export type JobType = $Enums.JobType
+
+export const JobType: typeof $Enums.JobType
 
 /**
  * ##  Prisma Client ʲˢ
@@ -3463,20 +3476,25 @@ export namespace Prisma {
 
   export type JobAvgAggregateOutputType = {
     progress: number | null
+    maxDepth: number | null
   }
 
   export type JobSumAggregateOutputType = {
     progress: number | null
+    maxDepth: number | null
   }
 
   export type JobMinAggregateOutputType = {
     id: string | null
     url: string | null
     status: $Enums.JobStatus | null
+    type: $Enums.JobType | null
     progress: number | null
     startDate: Date | null
     endDate: Date | null
     error: string | null
+    name: string | null
+    maxDepth: number | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -3485,10 +3503,13 @@ export namespace Prisma {
     id: string | null
     url: string | null
     status: $Enums.JobStatus | null
+    type: $Enums.JobType | null
     progress: number | null
     startDate: Date | null
     endDate: Date | null
     error: string | null
+    name: string | null
+    maxDepth: number | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -3497,11 +3518,16 @@ export namespace Prisma {
     id: number
     url: number
     status: number
+    type: number
     progress: number
     startDate: number
     endDate: number
     error: number
     stats: number
+    name: number
+    maxDepth: number
+    tags: number
+    metadata: number
     createdAt: number
     updatedAt: number
     _all: number
@@ -3510,20 +3536,25 @@ export namespace Prisma {
 
   export type JobAvgAggregateInputType = {
     progress?: true
+    maxDepth?: true
   }
 
   export type JobSumAggregateInputType = {
     progress?: true
+    maxDepth?: true
   }
 
   export type JobMinAggregateInputType = {
     id?: true
     url?: true
     status?: true
+    type?: true
     progress?: true
     startDate?: true
     endDate?: true
     error?: true
+    name?: true
+    maxDepth?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -3532,10 +3563,13 @@ export namespace Prisma {
     id?: true
     url?: true
     status?: true
+    type?: true
     progress?: true
     startDate?: true
     endDate?: true
     error?: true
+    name?: true
+    maxDepth?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -3544,11 +3578,16 @@ export namespace Prisma {
     id?: true
     url?: true
     status?: true
+    type?: true
     progress?: true
     startDate?: true
     endDate?: true
     error?: true
     stats?: true
+    name?: true
+    maxDepth?: true
+    tags?: true
+    metadata?: true
     createdAt?: true
     updatedAt?: true
     _all?: true
@@ -3644,11 +3683,16 @@ export namespace Prisma {
     id: string
     url: string
     status: $Enums.JobStatus
+    type: $Enums.JobType
     progress: number
     startDate: Date
     endDate: Date | null
     error: string | null
     stats: JsonValue
+    name: string | null
+    maxDepth: number | null
+    tags: string[]
+    metadata: JsonValue | null
     createdAt: Date
     updatedAt: Date
     _count: JobCountAggregateOutputType | null
@@ -3676,11 +3720,16 @@ export namespace Prisma {
     id?: boolean
     url?: boolean
     status?: boolean
+    type?: boolean
     progress?: boolean
     startDate?: boolean
     endDate?: boolean
     error?: boolean
     stats?: boolean
+    name?: boolean
+    maxDepth?: boolean
+    tags?: boolean
+    metadata?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["job"]>
@@ -3689,11 +3738,16 @@ export namespace Prisma {
     id?: boolean
     url?: boolean
     status?: boolean
+    type?: boolean
     progress?: boolean
     startDate?: boolean
     endDate?: boolean
     error?: boolean
     stats?: boolean
+    name?: boolean
+    maxDepth?: boolean
+    tags?: boolean
+    metadata?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["job"]>
@@ -3702,11 +3756,16 @@ export namespace Prisma {
     id?: boolean
     url?: boolean
     status?: boolean
+    type?: boolean
     progress?: boolean
     startDate?: boolean
     endDate?: boolean
     error?: boolean
     stats?: boolean
+    name?: boolean
+    maxDepth?: boolean
+    tags?: boolean
+    metadata?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["job"]>
@@ -3715,16 +3774,21 @@ export namespace Prisma {
     id?: boolean
     url?: boolean
     status?: boolean
+    type?: boolean
     progress?: boolean
     startDate?: boolean
     endDate?: boolean
     error?: boolean
     stats?: boolean
+    name?: boolean
+    maxDepth?: boolean
+    tags?: boolean
+    metadata?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type JobOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "url" | "status" | "progress" | "startDate" | "endDate" | "error" | "stats" | "createdAt" | "updatedAt", ExtArgs["result"]["job"]>
+  export type JobOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "url" | "status" | "type" | "progress" | "startDate" | "endDate" | "error" | "stats" | "name" | "maxDepth" | "tags" | "metadata" | "createdAt" | "updatedAt", ExtArgs["result"]["job"]>
 
   export type $JobPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "Job"
@@ -3733,11 +3797,16 @@ export namespace Prisma {
       id: string
       url: string
       status: $Enums.JobStatus
+      type: $Enums.JobType
       progress: number
       startDate: Date
       endDate: Date | null
       error: string | null
       stats: Prisma.JsonValue
+      name: string | null
+      maxDepth: number | null
+      tags: string[]
+      metadata: Prisma.JsonValue | null
       createdAt: Date
       updatedAt: Date
     }, ExtArgs["result"]["job"]>
@@ -4166,11 +4235,16 @@ export namespace Prisma {
     readonly id: FieldRef<"Job", 'String'>
     readonly url: FieldRef<"Job", 'String'>
     readonly status: FieldRef<"Job", 'JobStatus'>
+    readonly type: FieldRef<"Job", 'JobType'>
     readonly progress: FieldRef<"Job", 'Float'>
     readonly startDate: FieldRef<"Job", 'DateTime'>
     readonly endDate: FieldRef<"Job", 'DateTime'>
     readonly error: FieldRef<"Job", 'String'>
     readonly stats: FieldRef<"Job", 'Json'>
+    readonly name: FieldRef<"Job", 'String'>
+    readonly maxDepth: FieldRef<"Job", 'Int'>
+    readonly tags: FieldRef<"Job", 'String[]'>
+    readonly metadata: FieldRef<"Job", 'Json'>
     readonly createdAt: FieldRef<"Job", 'DateTime'>
     readonly updatedAt: FieldRef<"Job", 'DateTime'>
   }
@@ -4586,11 +4660,16 @@ export namespace Prisma {
     id: 'id',
     url: 'url',
     status: 'status',
+    type: 'type',
     progress: 'progress',
     startDate: 'startDate',
     endDate: 'endDate',
     error: 'error',
     stats: 'stats',
+    name: 'name',
+    maxDepth: 'maxDepth',
+    tags: 'tags',
+    metadata: 'metadata',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   };
@@ -4611,6 +4690,14 @@ export namespace Prisma {
   };
 
   export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNullValueInput]
+
+
+  export const NullableJsonNullValueInput: {
+    DbNull: typeof DbNull,
+    JsonNull: typeof JsonNull
+  };
+
+  export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
   export const QueryMode: {
@@ -4724,6 +4811,20 @@ export namespace Prisma {
    * Reference to a field of type 'JobStatus[]'
    */
   export type ListEnumJobStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'JobStatus[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'JobType'
+   */
+  export type EnumJobTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'JobType'>
+    
+
+
+  /**
+   * Reference to a field of type 'JobType[]'
+   */
+  export type ListEnumJobTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'JobType[]'>
     
   /**
    * Deep Input Types
@@ -4892,11 +4993,16 @@ export namespace Prisma {
     id?: StringFilter<"Job"> | string
     url?: StringFilter<"Job"> | string
     status?: EnumJobStatusFilter<"Job"> | $Enums.JobStatus
+    type?: EnumJobTypeFilter<"Job"> | $Enums.JobType
     progress?: FloatFilter<"Job"> | number
     startDate?: DateTimeFilter<"Job"> | Date | string
     endDate?: DateTimeNullableFilter<"Job"> | Date | string | null
     error?: StringNullableFilter<"Job"> | string | null
     stats?: JsonFilter<"Job">
+    name?: StringNullableFilter<"Job"> | string | null
+    maxDepth?: IntNullableFilter<"Job"> | number | null
+    tags?: StringNullableListFilter<"Job">
+    metadata?: JsonNullableFilter<"Job">
     createdAt?: DateTimeFilter<"Job"> | Date | string
     updatedAt?: DateTimeFilter<"Job"> | Date | string
   }
@@ -4905,11 +5011,16 @@ export namespace Prisma {
     id?: SortOrder
     url?: SortOrder
     status?: SortOrder
+    type?: SortOrder
     progress?: SortOrder
     startDate?: SortOrder
     endDate?: SortOrderInput | SortOrder
     error?: SortOrderInput | SortOrder
     stats?: SortOrder
+    name?: SortOrderInput | SortOrder
+    maxDepth?: SortOrderInput | SortOrder
+    tags?: SortOrder
+    metadata?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -4921,11 +5032,16 @@ export namespace Prisma {
     NOT?: JobWhereInput | JobWhereInput[]
     url?: StringFilter<"Job"> | string
     status?: EnumJobStatusFilter<"Job"> | $Enums.JobStatus
+    type?: EnumJobTypeFilter<"Job"> | $Enums.JobType
     progress?: FloatFilter<"Job"> | number
     startDate?: DateTimeFilter<"Job"> | Date | string
     endDate?: DateTimeNullableFilter<"Job"> | Date | string | null
     error?: StringNullableFilter<"Job"> | string | null
     stats?: JsonFilter<"Job">
+    name?: StringNullableFilter<"Job"> | string | null
+    maxDepth?: IntNullableFilter<"Job"> | number | null
+    tags?: StringNullableListFilter<"Job">
+    metadata?: JsonNullableFilter<"Job">
     createdAt?: DateTimeFilter<"Job"> | Date | string
     updatedAt?: DateTimeFilter<"Job"> | Date | string
   }, "id">
@@ -4934,11 +5050,16 @@ export namespace Prisma {
     id?: SortOrder
     url?: SortOrder
     status?: SortOrder
+    type?: SortOrder
     progress?: SortOrder
     startDate?: SortOrder
     endDate?: SortOrderInput | SortOrder
     error?: SortOrderInput | SortOrder
     stats?: SortOrder
+    name?: SortOrderInput | SortOrder
+    maxDepth?: SortOrderInput | SortOrder
+    tags?: SortOrder
+    metadata?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: JobCountOrderByAggregateInput
@@ -4955,11 +5076,16 @@ export namespace Prisma {
     id?: StringWithAggregatesFilter<"Job"> | string
     url?: StringWithAggregatesFilter<"Job"> | string
     status?: EnumJobStatusWithAggregatesFilter<"Job"> | $Enums.JobStatus
+    type?: EnumJobTypeWithAggregatesFilter<"Job"> | $Enums.JobType
     progress?: FloatWithAggregatesFilter<"Job"> | number
     startDate?: DateTimeWithAggregatesFilter<"Job"> | Date | string
     endDate?: DateTimeNullableWithAggregatesFilter<"Job"> | Date | string | null
     error?: StringNullableWithAggregatesFilter<"Job"> | string | null
     stats?: JsonWithAggregatesFilter<"Job">
+    name?: StringNullableWithAggregatesFilter<"Job"> | string | null
+    maxDepth?: IntNullableWithAggregatesFilter<"Job"> | number | null
+    tags?: StringNullableListFilter<"Job">
+    metadata?: JsonNullableWithAggregatesFilter<"Job">
     createdAt?: DateTimeWithAggregatesFilter<"Job"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Job"> | Date | string
   }
@@ -5135,11 +5261,16 @@ export namespace Prisma {
     id?: string
     url: string
     status?: $Enums.JobStatus
+    type?: $Enums.JobType
     progress?: number
     startDate: Date | string
     endDate?: Date | string | null
     error?: string | null
     stats?: JsonNullValueInput | InputJsonValue
+    name?: string | null
+    maxDepth?: number | null
+    tags?: JobCreatetagsInput | string[]
+    metadata?: NullableJsonNullValueInput | InputJsonValue
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -5148,11 +5279,16 @@ export namespace Prisma {
     id?: string
     url: string
     status?: $Enums.JobStatus
+    type?: $Enums.JobType
     progress?: number
     startDate: Date | string
     endDate?: Date | string | null
     error?: string | null
     stats?: JsonNullValueInput | InputJsonValue
+    name?: string | null
+    maxDepth?: number | null
+    tags?: JobCreatetagsInput | string[]
+    metadata?: NullableJsonNullValueInput | InputJsonValue
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -5161,11 +5297,16 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     url?: StringFieldUpdateOperationsInput | string
     status?: EnumJobStatusFieldUpdateOperationsInput | $Enums.JobStatus
+    type?: EnumJobTypeFieldUpdateOperationsInput | $Enums.JobType
     progress?: FloatFieldUpdateOperationsInput | number
     startDate?: DateTimeFieldUpdateOperationsInput | Date | string
     endDate?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     error?: NullableStringFieldUpdateOperationsInput | string | null
     stats?: JsonNullValueInput | InputJsonValue
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    maxDepth?: NullableIntFieldUpdateOperationsInput | number | null
+    tags?: JobUpdatetagsInput | string[]
+    metadata?: NullableJsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -5174,11 +5315,16 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     url?: StringFieldUpdateOperationsInput | string
     status?: EnumJobStatusFieldUpdateOperationsInput | $Enums.JobStatus
+    type?: EnumJobTypeFieldUpdateOperationsInput | $Enums.JobType
     progress?: FloatFieldUpdateOperationsInput | number
     startDate?: DateTimeFieldUpdateOperationsInput | Date | string
     endDate?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     error?: NullableStringFieldUpdateOperationsInput | string | null
     stats?: JsonNullValueInput | InputJsonValue
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    maxDepth?: NullableIntFieldUpdateOperationsInput | number | null
+    tags?: JobUpdatetagsInput | string[]
+    metadata?: NullableJsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -5187,11 +5333,16 @@ export namespace Prisma {
     id?: string
     url: string
     status?: $Enums.JobStatus
+    type?: $Enums.JobType
     progress?: number
     startDate: Date | string
     endDate?: Date | string | null
     error?: string | null
     stats?: JsonNullValueInput | InputJsonValue
+    name?: string | null
+    maxDepth?: number | null
+    tags?: JobCreatetagsInput | string[]
+    metadata?: NullableJsonNullValueInput | InputJsonValue
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -5200,11 +5351,16 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     url?: StringFieldUpdateOperationsInput | string
     status?: EnumJobStatusFieldUpdateOperationsInput | $Enums.JobStatus
+    type?: EnumJobTypeFieldUpdateOperationsInput | $Enums.JobType
     progress?: FloatFieldUpdateOperationsInput | number
     startDate?: DateTimeFieldUpdateOperationsInput | Date | string
     endDate?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     error?: NullableStringFieldUpdateOperationsInput | string | null
     stats?: JsonNullValueInput | InputJsonValue
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    maxDepth?: NullableIntFieldUpdateOperationsInput | number | null
+    tags?: JobUpdatetagsInput | string[]
+    metadata?: NullableJsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -5213,11 +5369,16 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     url?: StringFieldUpdateOperationsInput | string
     status?: EnumJobStatusFieldUpdateOperationsInput | $Enums.JobStatus
+    type?: EnumJobTypeFieldUpdateOperationsInput | $Enums.JobType
     progress?: FloatFieldUpdateOperationsInput | number
     startDate?: DateTimeFieldUpdateOperationsInput | Date | string
     endDate?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     error?: NullableStringFieldUpdateOperationsInput | string | null
     stats?: JsonNullValueInput | InputJsonValue
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    maxDepth?: NullableIntFieldUpdateOperationsInput | number | null
+    tags?: JobUpdatetagsInput | string[]
+    metadata?: NullableJsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -5518,6 +5679,13 @@ export namespace Prisma {
     not?: NestedEnumJobStatusFilter<$PrismaModel> | $Enums.JobStatus
   }
 
+  export type EnumJobTypeFilter<$PrismaModel = never> = {
+    equals?: $Enums.JobType | EnumJobTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.JobType[] | ListEnumJobTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.JobType[] | ListEnumJobTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumJobTypeFilter<$PrismaModel> | $Enums.JobType
+  }
+
   export type FloatFilter<$PrismaModel = never> = {
     equals?: number | FloatFieldRefInput<$PrismaModel>
     in?: number[] | ListFloatFieldRefInput<$PrismaModel>
@@ -5540,31 +5708,82 @@ export namespace Prisma {
     not?: NestedDateTimeNullableFilter<$PrismaModel> | Date | string | null
   }
 
+  export type IntNullableFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntNullableFilter<$PrismaModel> | number | null
+  }
+
+  export type StringNullableListFilter<$PrismaModel = never> = {
+    equals?: string[] | ListStringFieldRefInput<$PrismaModel> | null
+    has?: string | StringFieldRefInput<$PrismaModel> | null
+    hasEvery?: string[] | ListStringFieldRefInput<$PrismaModel>
+    hasSome?: string[] | ListStringFieldRefInput<$PrismaModel>
+    isEmpty?: boolean
+  }
+  export type JsonNullableFilter<$PrismaModel = never> =
+    | PatchUndefined<
+        Either<Required<JsonNullableFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonNullableFilterBase<$PrismaModel>>, 'path'>>,
+        Required<JsonNullableFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<JsonNullableFilterBase<$PrismaModel>>, 'path'>>
+
+  export type JsonNullableFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+  }
+
   export type JobCountOrderByAggregateInput = {
     id?: SortOrder
     url?: SortOrder
     status?: SortOrder
+    type?: SortOrder
     progress?: SortOrder
     startDate?: SortOrder
     endDate?: SortOrder
     error?: SortOrder
     stats?: SortOrder
+    name?: SortOrder
+    maxDepth?: SortOrder
+    tags?: SortOrder
+    metadata?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
 
   export type JobAvgOrderByAggregateInput = {
     progress?: SortOrder
+    maxDepth?: SortOrder
   }
 
   export type JobMaxOrderByAggregateInput = {
     id?: SortOrder
     url?: SortOrder
     status?: SortOrder
+    type?: SortOrder
     progress?: SortOrder
     startDate?: SortOrder
     endDate?: SortOrder
     error?: SortOrder
+    name?: SortOrder
+    maxDepth?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -5573,16 +5792,20 @@ export namespace Prisma {
     id?: SortOrder
     url?: SortOrder
     status?: SortOrder
+    type?: SortOrder
     progress?: SortOrder
     startDate?: SortOrder
     endDate?: SortOrder
     error?: SortOrder
+    name?: SortOrder
+    maxDepth?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
 
   export type JobSumOrderByAggregateInput = {
     progress?: SortOrder
+    maxDepth?: SortOrder
   }
 
   export type EnumJobStatusWithAggregatesFilter<$PrismaModel = never> = {
@@ -5593,6 +5816,16 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedEnumJobStatusFilter<$PrismaModel>
     _max?: NestedEnumJobStatusFilter<$PrismaModel>
+  }
+
+  export type EnumJobTypeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.JobType | EnumJobTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.JobType[] | ListEnumJobTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.JobType[] | ListEnumJobTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumJobTypeWithAggregatesFilter<$PrismaModel> | $Enums.JobType
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumJobTypeFilter<$PrismaModel>
+    _max?: NestedEnumJobTypeFilter<$PrismaModel>
   }
 
   export type FloatWithAggregatesFilter<$PrismaModel = never> = {
@@ -5623,6 +5856,48 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedDateTimeNullableFilter<$PrismaModel>
     _max?: NestedDateTimeNullableFilter<$PrismaModel>
+  }
+
+  export type IntNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntNullableWithAggregatesFilter<$PrismaModel> | number | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _avg?: NestedFloatNullableFilter<$PrismaModel>
+    _sum?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedIntNullableFilter<$PrismaModel>
+    _max?: NestedIntNullableFilter<$PrismaModel>
+  }
+  export type JsonNullableWithAggregatesFilter<$PrismaModel = never> =
+    | PatchUndefined<
+        Either<Required<JsonNullableWithAggregatesFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonNullableWithAggregatesFilterBase<$PrismaModel>>, 'path'>>,
+        Required<JsonNullableWithAggregatesFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<JsonNullableWithAggregatesFilterBase<$PrismaModel>>, 'path'>>
+
+  export type JsonNullableWithAggregatesFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedJsonNullableFilter<$PrismaModel>
+    _max?: NestedJsonNullableFilter<$PrismaModel>
   }
 
   export type DocumentCreateNestedOneWithoutChildDocumentsInput = {
@@ -5768,8 +6043,16 @@ export namespace Prisma {
     update?: XOR<XOR<DocumentUpdateToOneWithWhereWithoutChunksInput, DocumentUpdateWithoutChunksInput>, DocumentUncheckedUpdateWithoutChunksInput>
   }
 
+  export type JobCreatetagsInput = {
+    set: string[]
+  }
+
   export type EnumJobStatusFieldUpdateOperationsInput = {
     set?: $Enums.JobStatus
+  }
+
+  export type EnumJobTypeFieldUpdateOperationsInput = {
+    set?: $Enums.JobType
   }
 
   export type FloatFieldUpdateOperationsInput = {
@@ -5782,6 +6065,19 @@ export namespace Prisma {
 
   export type NullableDateTimeFieldUpdateOperationsInput = {
     set?: Date | string | null
+  }
+
+  export type NullableIntFieldUpdateOperationsInput = {
+    set?: number | null
+    increment?: number
+    decrement?: number
+    multiply?: number
+    divide?: number
+  }
+
+  export type JobUpdatetagsInput = {
+    set?: string[]
+    push?: string | string[]
   }
 
   export type NestedStringFilter<$PrismaModel = never> = {
@@ -5950,6 +6246,13 @@ export namespace Prisma {
     not?: NestedEnumJobStatusFilter<$PrismaModel> | $Enums.JobStatus
   }
 
+  export type NestedEnumJobTypeFilter<$PrismaModel = never> = {
+    equals?: $Enums.JobType | EnumJobTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.JobType[] | ListEnumJobTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.JobType[] | ListEnumJobTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumJobTypeFilter<$PrismaModel> | $Enums.JobType
+  }
+
   export type NestedDateTimeNullableFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel> | null
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null
@@ -5969,6 +6272,16 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedEnumJobStatusFilter<$PrismaModel>
     _max?: NestedEnumJobStatusFilter<$PrismaModel>
+  }
+
+  export type NestedEnumJobTypeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.JobType | EnumJobTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.JobType[] | ListEnumJobTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.JobType[] | ListEnumJobTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumJobTypeWithAggregatesFilter<$PrismaModel> | $Enums.JobType
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumJobTypeFilter<$PrismaModel>
+    _max?: NestedEnumJobTypeFilter<$PrismaModel>
   }
 
   export type NestedFloatWithAggregatesFilter<$PrismaModel = never> = {
@@ -5999,6 +6312,56 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedDateTimeNullableFilter<$PrismaModel>
     _max?: NestedDateTimeNullableFilter<$PrismaModel>
+  }
+
+  export type NestedIntNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntNullableWithAggregatesFilter<$PrismaModel> | number | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _avg?: NestedFloatNullableFilter<$PrismaModel>
+    _sum?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedIntNullableFilter<$PrismaModel>
+    _max?: NestedIntNullableFilter<$PrismaModel>
+  }
+
+  export type NestedFloatNullableFilter<$PrismaModel = never> = {
+    equals?: number | FloatFieldRefInput<$PrismaModel> | null
+    in?: number[] | ListFloatFieldRefInput<$PrismaModel> | null
+    notIn?: number[] | ListFloatFieldRefInput<$PrismaModel> | null
+    lt?: number | FloatFieldRefInput<$PrismaModel>
+    lte?: number | FloatFieldRefInput<$PrismaModel>
+    gt?: number | FloatFieldRefInput<$PrismaModel>
+    gte?: number | FloatFieldRefInput<$PrismaModel>
+    not?: NestedFloatNullableFilter<$PrismaModel> | number | null
+  }
+  export type NestedJsonNullableFilter<$PrismaModel = never> =
+    | PatchUndefined<
+        Either<Required<NestedJsonNullableFilterBase<$PrismaModel>>, Exclude<keyof Required<NestedJsonNullableFilterBase<$PrismaModel>>, 'path'>>,
+        Required<NestedJsonNullableFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<NestedJsonNullableFilterBase<$PrismaModel>>, 'path'>>
+
+  export type NestedJsonNullableFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
   }
 
   export type DocumentCreateWithoutChildDocumentsInput = {

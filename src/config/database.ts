@@ -4,9 +4,9 @@ import logger from '../utils/logger';
 // Environment-specific database URL
 const getDatabaseUrl = () => {
   if (process.env.NODE_ENV === 'test') {
-    return process.env.TEST_DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/docmcp_test';
+    return process.env.TEST_DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/docmcp_test';
   }
-  return process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/docmcp';
+  return process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5433/docmcp';
 };
 
 // Prisma client options based on environment

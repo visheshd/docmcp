@@ -57,15 +57,28 @@ enum JobStatus {
   failed
 }
 
+enum JobType {
+  crawl
+  process
+  delete
+}
+
 model Job {
   id        String    @id @default(uuid())
   url       String
   status    JobStatus @default(pending)
+  type      JobType   @default(crawl)
   progress  Float     @default(0)
   startDate DateTime  @map("start_date")
   endDate   DateTime? @map("end_date")
   error     String?   @db.Text
   stats     Json      @default("{ \"pagesProcessed\": 0, \"pagesSkipped\": 0, \"totalChunks\": 0 }")
+  // Additional fields for documentation crawling
+  name      String? // Friendly name for the documentation source
+  maxDepth  Int?      @map("max_depth") // Maximum depth for crawling
+  tags      String[] // Tags associated with this documentation
+  metadata  Json? // Additional metadata about the job
+  // Timestamps
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 

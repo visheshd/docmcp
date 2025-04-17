@@ -55,10 +55,14 @@ async function clearDatabase() {
 export async function setupTestDatabase() {
   try {
     console.log('Setting up test database...');
+    console.log(`Using test database URL: ${TEST_DATABASE_URL}`);
     
-    // Run migrations first
+    // Run migrations with explicit database URL
     console.log('Running migrations...');
-    execSync('npx prisma migrate deploy', { stdio: 'inherit' });
+    execSync(`DATABASE_URL="${TEST_DATABASE_URL}" npx prisma migrate deploy`, { 
+      stdio: 'inherit',
+      env: {...process.env, DATABASE_URL: TEST_DATABASE_URL}
+    });
     
     // Initialize client after migrations
     const prisma = getPrismaClient();

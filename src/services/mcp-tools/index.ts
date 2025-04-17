@@ -1,4 +1,5 @@
 import { registerSampleTool } from './sample.tool';
+import { registerAddDocumentationTool } from './add-documentation.tool';
 import logger from '../../utils/logger';
 
 /**
@@ -10,9 +11,9 @@ export const registerAllTools = () => {
   
   // Register all tools here
   registerSampleTool();
+  registerAddDocumentationTool();
   
   // Add more tool registrations here as they are implemented
-  // Example: registerAddDocumentationTool();
   // Example: registerQueryDocumentationTool();
   
   logger.info('All MCP tools registered successfully');

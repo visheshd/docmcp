@@ -1,6 +1,6 @@
 ---
 description: 
-globs: *.service.ts,*.service.test.ts
+globs: *.test.ts,*.ts
 alwaysApply: false
 ---
 

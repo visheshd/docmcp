@@ -1,6 +1,6 @@
 import { JobService } from '../../services/job.service';
 import { getTestPrismaClient } from '../utils/testDb';
-import type { Job, JobStatus } from '../../generated/prisma';
+import type { JobStatus, JobType, Prisma } from '../../generated/prisma';
 
 describe('JobService Integration Tests', () => {
   let jobService: JobService;
@@ -17,13 +17,14 @@ describe('JobService Integration Tests', () => {
 
   describe('createJob', () => {
     it('should create a job successfully', async () => {
-      const testJob: Omit<Job, 'id' | 'createdAt' | 'updatedAt'> = {
+      const testJob: Prisma.JobCreateInput = {
         url: 'https://test.com/docs',
         status: 'pending',
+        type: 'crawl',
         progress: 0,
         startDate: new Date(),
-        endDate: null,
-        error: null,
+        name: 'Test Job',
+        tags: [],
         stats: { pagesProcessed: 0, pagesSkipped: 0, totalChunks: 0 },
       };
 
@@ -42,8 +43,11 @@ describe('JobService Integration Tests', () => {
         data: {
           url: 'https://test.com/docs',
           status: 'pending',
+          type: 'crawl',
           progress: 0,
           startDate: new Date(),
+          name: 'Test Job',
+          tags: [],
           stats: { pagesProcessed: 0, pagesSkipped: 0, totalChunks: 0 },
         },
       });
@@ -68,15 +72,21 @@ describe('JobService Integration Tests', () => {
           {
             url: 'https://test.com/docs/1',
             status,
+            type: 'crawl' as JobType,
             progress: 0.5,
             startDate: new Date(),
+            name: 'Test Job 1',
+            tags: [],
             stats: { pagesProcessed: 5, pagesSkipped: 1, totalChunks: 20 },
           },
           {
             url: 'https://test.com/docs/2',
             status,
+            type: 'crawl' as JobType,
             progress: 0.7,
             startDate: new Date(),
+            name: 'Test Job 2',
+            tags: [],
             stats: { pagesProcessed: 7, pagesSkipped: 2, totalChunks: 30 },
           },
         ],
@@ -96,8 +106,11 @@ describe('JobService Integration Tests', () => {
         data: {
           url: 'https://test.com/docs',
           status: 'pending',
+          type: 'crawl',
           progress: 0,
           startDate: new Date(),
+          name: 'Test Job',
+          tags: [],
           stats: { pagesProcessed: 0, pagesSkipped: 0, totalChunks: 0 },
         },
       });
@@ -114,8 +127,11 @@ describe('JobService Integration Tests', () => {
         data: {
           url: 'https://test.com/docs',
           status: 'running',
+          type: 'crawl',
           progress: 0.8,
           startDate: new Date(),
+          name: 'Test Job',
+          tags: [],
           stats: { pagesProcessed: 8, pagesSkipped: 1, totalChunks: 40 },
         },
       });
@@ -134,8 +150,11 @@ describe('JobService Integration Tests', () => {
         data: {
           url: 'https://test.com/docs',
           status: 'running',
+          type: 'crawl',
           progress: 0.5,
           startDate: new Date(),
+          name: 'Test Job',
+          tags: [],
           stats: { pagesProcessed: 5, pagesSkipped: 1, totalChunks: 20 },
         },
       });
@@ -155,8 +174,11 @@ describe('JobService Integration Tests', () => {
         data: {
           url: 'https://test.com/docs',
           status: 'running',
+          type: 'crawl',
           progress: 0.5,
           startDate: new Date(),
+          name: 'Test Job',
+          tags: [],
           stats: { pagesProcessed: 0, pagesSkipped: 0, totalChunks: 0 },
         },
       });
@@ -179,9 +201,12 @@ describe('JobService Integration Tests', () => {
         data: {
           url: 'https://test.com/docs',
           status: 'completed',
+          type: 'crawl',
           progress: 1.0,
           startDate: new Date(),
           endDate: new Date(),
+          name: 'Test Job',
+          tags: [],
           stats: { pagesProcessed: 10, pagesSkipped: 2, totalChunks: 50 },
         },
       });

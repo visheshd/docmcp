@@ -144,11 +144,16 @@ exports.Prisma.JobScalarFieldEnum = {
   id: 'id',
   url: 'url',
   status: 'status',
+  type: 'type',
   progress: 'progress',
   startDate: 'startDate',
   endDate: 'endDate',
   error: 'error',
   stats: 'stats',
+  name: 'name',
+  maxDepth: 'maxDepth',
+  tags: 'tags',
+  metadata: 'metadata',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -159,6 +164,11 @@ exports.Prisma.SortOrder = {
 };
 
 exports.Prisma.JsonNullValueInput = {
+  JsonNull: Prisma.JsonNull
+};
+
+exports.Prisma.NullableJsonNullValueInput = {
+  DbNull: Prisma.DbNull,
   JsonNull: Prisma.JsonNull
 };
 
@@ -182,6 +192,12 @@ exports.JobStatus = exports.$Enums.JobStatus = {
   running: 'running',
   completed: 'completed',
   failed: 'failed'
+};
+
+exports.JobType = exports.$Enums.JobType = {
+  crawl: 'crawl',
+  process: 'process',
+  delete: 'delete'
 };
 
 exports.Prisma.ModelName = {
