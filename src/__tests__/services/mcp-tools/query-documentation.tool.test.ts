@@ -19,12 +19,12 @@ describe('Query Documentation Tool', () => {
     // Mock DocumentProcessorService.createEmbedding
     mockedDocumentProcessorService.prototype.createEmbedding = jest.fn().mockResolvedValue([0.1, 0.2, 0.3]);
     
-    // Mock ChunkService.findSimilarChunks
+    // Mock ChunkService.findSimilarChunks with more realistic mock data
     mockedChunkService.prototype.findSimilarChunks = jest.fn().mockResolvedValue([
       {
         id: 'chunk1',
-        content: 'Test content for the documentation',
-        metadata: { tags: ['test'] },
+        content: 'Test content for the documentation with some `code` example.',
+        metadata: { package: 'test-lib', version: '1.0.0', tags: ['test'] },
         documentId: 'doc1',
         url: 'https://example.com/docs',
         title: 'Test Documentation',
@@ -33,7 +33,7 @@ describe('Query Documentation Tool', () => {
     ]);
   });
 
-  it('should handle queries and return formatted results', async () => {
+  it('should handle queries and return formatted results with citations', async () => {
     // Execute the handler function
     const result = await queryDocumentationTool.handler({
       query: 'How do I use this API?'
@@ -43,13 +43,23 @@ describe('Query Documentation Tool', () => {
     expect(mockedDocumentProcessorService.prototype.createEmbedding).toHaveBeenCalledWith('How do I use this API?');
     
     // Verify ChunkService.findSimilarChunks was called with the embedding
-    expect(mockedChunkService.prototype.findSimilarChunks).toHaveBeenCalledWith([0.1, 0.2, 0.3], 5);
+    expect(mockedChunkService.prototype.findSimilarChunks).toHaveBeenCalledWith([0.1, 0.2, 0.3], 5, undefined);
     
     // Verify results format
     expect(result).toHaveProperty('message', 'Found relevant documentation:');
+    expect(result).toHaveProperty('summary');
     expect(result).toHaveProperty('results');
     expect(result.results).toBeInstanceOf(Array);
-    expect(result.results[0]).toContain('[Test Documentation](https://example.com/docs)');
+    
+    // Check if summary contains expected information
+    expect(result.summary).toContain('Documentation Results for: "How do I use this API?"');
+    expect(result.summary).toContain('Found 1 relevant documentation sources');
+    expect(result.summary).toContain('Test Documentation');
+    
+    // Check if results contain expected formatting
+    expect(result.results[0]).toContain('## [Test Documentation](https://example.com/docs)');
+    expect(result.results[0]).toContain('Package: test-lib v1.0.0');
+    expect(result.results[0]).toContain('Relevance:');
     expect(result.results[0]).toContain('Test content for the documentation');
   });
 
@@ -89,6 +99,14 @@ describe('Query Documentation Tool', () => {
     
     // Verify the package parameter was passed to findSimilarChunks
     expect(mockedChunkService.prototype.findSimilarChunks).toHaveBeenCalledWith([0.1, 0.2, 0.3], 5, 'react');
+    
+    // Verify results include package filtering information
+    const result = await queryDocumentationTool.handler({
+      query: 'API documentation',
+      package: 'react'
+    });
+    
+    expect(result.summary).toContain('Results filtered to package: react');
   });
 
   it('should handle both limit and package parameters together', async () => {
@@ -101,6 +119,43 @@ describe('Query Documentation Tool', () => {
     
     // Verify both parameters were passed correctly
     expect(mockedChunkService.prototype.findSimilarChunks).toHaveBeenCalledWith([0.1, 0.2, 0.3], 8, 'prisma');
+  });
+
+  it('should handle code context to provide more relevant results', async () => {
+    // Mock data with multiple results to test sorting
+    mockedChunkService.prototype.findSimilarChunks = jest.fn().mockResolvedValue([
+      {
+        id: 'chunk1',
+        content: 'General documentation without the specific function.',
+        metadata: { package: 'test-lib', version: '1.0.0' },
+        documentId: 'doc1',
+        url: 'https://example.com/docs/general',
+        title: 'General Documentation',
+        similarity: 0.92 // Higher baseline similarity
+      },
+      {
+        id: 'chunk2',
+        content: 'The fetchData function allows you to retrieve data from an API.',
+        metadata: { package: 'test-lib', version: '1.0.0' },
+        documentId: 'doc2',
+        url: 'https://example.com/docs/api',
+        title: 'API Reference',
+        similarity: 0.85 // Lower baseline similarity but contains the function name
+      }
+    ]);
+    
+    // Execute with code context
+    const result = await queryDocumentationTool.handler({
+      query: 'How to use API?',
+      context: 'const data = await fetchData("/api/users");'
+    });
+    
+    // The API Reference should be prioritized over the General Documentation
+    // despite having a lower baseline similarity, because it contains the function name
+    expect(result.results[0]).toContain('API Reference');
+    
+    // Verify context information is mentioned in summary
+    expect(result.summary).toContain('Code context was used to prioritize relevant results');
   });
 
   it('should handle errors during embedding generation', async () => {
