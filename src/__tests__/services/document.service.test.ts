@@ -7,7 +7,7 @@ describe('DocumentService Integration Tests', () => {
   const prisma = getTestPrismaClient();
 
   beforeAll(async () => {
-    documentService = new DocumentService();
+    documentService = new DocumentService(prisma);
   });
 
   beforeEach(async () => {

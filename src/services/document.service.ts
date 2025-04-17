@@ -1,12 +1,12 @@
-import { getPrismaClient } from '../config/database';
+import { getPrismaClient as getMainPrismaClient } from '../config/database';
 import { PrismaClient, Prisma } from '../generated/prisma';
 import logger from '../utils/logger';
 
 export class DocumentService {
   private prisma: PrismaClient;
 
-  constructor() {
-    this.prisma = getPrismaClient();
+  constructor(prismaClient?: PrismaClient) {
+    this.prisma = prismaClient || getMainPrismaClient();
   }
 
   /**
