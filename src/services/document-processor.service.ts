@@ -90,6 +90,22 @@ export class DocumentProcessorService {
   }
 
   /**
+   * Create an embedding for a text string using the Ollama API
+   */
+  async createEmbedding(text: string): Promise<number[]> {
+    try {
+      const response = await axios.post(config.ollama.apiUrl, {
+        model: config.ollama.embedModel,
+        prompt: text
+      });
+      return response.data.embedding;
+    } catch (error) {
+      logger.error('Error creating embedding:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Process an HTML document and convert it to a clean markdown format
    */
   async processDocument(documentId: string, html: string, metadata: any = {}): Promise<string> {

@@ -80,8 +80,19 @@ export class ChunkService {
 
   /**
    * Find similar chunks using vector similarity
+   * @param embedding - The embedding vector to compare against
+   * @param limit - Maximum number of similar chunks to return (default: 5)
+   * @returns Promise<Array<{ id: string; content: string; metadata: Prisma.JsonValue; documentId: string; url: string; title: string; similarity: number; }>>
    */
-  async findSimilarChunks(embedding: number[], limit = 5) {
+  async findSimilarChunks(embedding: number[], limit = 5): Promise<Array<{
+    id: string;
+    content: string;
+    metadata: Prisma.JsonValue;
+    documentId: string;
+    url: string;
+    title: string;
+    similarity: number;
+  }>> {
     try {
       type ChunkResult = {
         id: string;
