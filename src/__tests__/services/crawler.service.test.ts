@@ -221,5 +221,147 @@ describe('CrawlerService Integration Tests', () => {
       expect(job?.status).toBe('completed');
       expect(job?.error).toContain('Error crawling');
     });
+
+    it('should respect robots.txt rules', async () => {
+      const baseUrl = 'https://test.com';
+      const robotsTxt = `
+        User-agent: DocMCPBot
+        Disallow: /private/
+        
+        User-agent: *
+        Allow: /
+      `;
+      
+      const testHtml = `
+        <html>
+          <head><title>Test</title></head>
+          <body>
+            <a href="/public">Public Page</a>
+            <a href="/private/secret">Private Page</a>
+          </body>
+        </html>
+      `;
+
+      const publicPageHtml = `
+        <html>
+          <head><title>Public Page</title></head>
+          <body><p>This is a public page</p></body>
+        </html>
+      `;
+
+      const privatePageHtml = `
+        <html>
+          <head><title>Private Page</title></head>
+          <body><p>This is a private page</p></body>
+        </html>
+      `;
+
+      // Mock HTTP requests including robots.txt
+      nock(baseUrl)
+        .get('/robots.txt')
+        .reply(200, robotsTxt)
+        .get('/')
+        .reply(200, testHtml)
+        .get('/public')
+        .reply(200, publicPageHtml)
+        .get('/private/secret')
+        .reply(200, privatePageHtml);
+
+      // Start crawling with robots.txt respect enabled
+      await crawlerService.crawl(baseUrl, { respectRobotsTxt: true });
+
+      // Should only have crawled the main page and public page
+      const documents = await prisma.document.findMany();
+      expect(documents).toHaveLength(2);
+      expect(documents.map(d => d.url).sort()).toEqual([
+        baseUrl,
+        `${baseUrl}/public`,
+      ]);
+      
+      // Verify the private page was not crawled
+      const privateDoc = await prisma.document.findFirst({
+        where: { url: `${baseUrl}/private/secret` },
+      });
+      expect(privateDoc).toBeNull();
+    });
+
+    it('should detect and follow pagination links', async () => {
+      const baseUrl = 'https://test.com';
+      
+      const page1Html = `
+        <html>
+          <head><title>Page 1</title></head>
+          <body>
+            <main>
+              <h1>Documentation - Page 1</h1>
+              <p>First page content.</p>
+              <nav class="pagination">
+                <a href="/page1" class="current">1</a>
+                <a href="/page2">2</a>
+                <a href="/page3">3</a>
+              </nav>
+            </main>
+          </body>
+        </html>
+      `;
+
+      const page2Html = `
+        <html>
+          <head><title>Page 2</title></head>
+          <body>
+            <main>
+              <h1>Documentation - Page 2</h1>
+              <p>Second page content.</p>
+              <nav class="pagination">
+                <a href="/page1">1</a>
+                <a href="/page2" class="current">2</a>
+                <a href="/page3">3</a>
+              </nav>
+            </main>
+          </body>
+        </html>
+      `;
+
+      const page3Html = `
+        <html>
+          <head><title>Page 3</title></head>
+          <body>
+            <main>
+              <h1>Documentation - Page 3</h1>
+              <p>Third page content.</p>
+              <nav class="pagination">
+                <a href="/page1">1</a>
+                <a href="/page2">2</a>
+                <a href="/page3" class="current">3</a>
+              </nav>
+            </main>
+          </body>
+        </html>
+      `;
+
+      // Mock HTTP requests
+      nock(baseUrl)
+        .get('/')
+        .reply(200, page1Html)
+        .get('/page1')
+        .reply(200, page1Html)
+        .get('/page2')
+        .reply(200, page2Html)
+        .get('/page3')
+        .reply(200, page3Html);
+
+      // Start crawling
+      await crawlerService.crawl(baseUrl);
+
+      // Should have crawled all three pages
+      const documents = await prisma.document.findMany();
+      expect(documents).toHaveLength(4); // Base URL + 3 pages
+      
+      // All pagination pages should be detected and crawled
+      const urls = documents.map(d => d.url).sort();
+      expect(urls).toContain(`${baseUrl}/page1`);
+      expect(urls).toContain(`${baseUrl}/page2`);
+      expect(urls).toContain(`${baseUrl}/page3`);
+    });
   });
 }); 

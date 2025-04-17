@@ -48,6 +48,7 @@
     "pgvector": "^0.2.0",
     "prisma": "^6.6.0",
     "reflect-metadata": "^0.2.2",
+    "robots-parser": "^3.0.1",
     "task-master-ai": "^0.11.1",
     "typeorm": "^0.3.22",
     "winston": "^3.17.0"

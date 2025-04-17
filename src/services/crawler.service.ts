@@ -5,10 +5,13 @@ import { PrismaClient } from '../generated/prisma';
 import logger from '../utils/logger';
 import { DocumentService } from './document.service';
 import { getPrismaClient as getMainPrismaClient } from '../config/database';
+import robotsParser from 'robots-parser';
+
 interface CrawlOptions {
   maxDepth: number;
   baseUrl: string;
   rateLimit?: number; // milliseconds between requests
+  respectRobotsTxt?: boolean; // whether to respect robots.txt rules
 }
 
 interface CrawlResult {
@@ -30,6 +33,7 @@ export class CrawlerService {
   private urlQueue: { url: string; depth: number }[] = [];
   private documentService: DocumentService;
   private prisma: PrismaClient;
+  private robotsTxt: any = null;
 
   constructor(prismaClient?: PrismaClient) {
     this.prisma = prismaClient || getMainPrismaClient();
@@ -44,11 +48,17 @@ export class CrawlerService {
       maxDepth: 3,
       baseUrl: new URL(startUrl).origin,
       rateLimit: 1000, // 1 second between requests by default
+      respectRobotsTxt: true, // respect robots.txt by default
     };
 
     const crawlOptions = { ...defaultOptions, ...options };
     this.urlQueue = [{ url: startUrl, depth: 0 }];
     this.visitedUrls.clear();
+
+    // Load robots.txt if enabled
+    if (crawlOptions.respectRobotsTxt) {
+      await this.loadRobotsTxt(crawlOptions.baseUrl);
+    }
 
     // Create job record before try block
     const job = await this.prisma.job.create({
@@ -69,6 +79,12 @@ export class CrawlerService {
         }
 
         if (this.visitedUrls.has(url)) {
+          continue;
+        }
+
+        // Check robots.txt rules if enabled
+        if (crawlOptions.respectRobotsTxt && this.robotsTxt && !this.isAllowedByRobotsTxt(url)) {
+          logger.info(`Skipping ${url} (disallowed by robots.txt)`);
           continue;
         }
 
@@ -162,6 +178,39 @@ export class CrawlerService {
   }
 
   /**
+   * Load and parse robots.txt file from a domain
+   */
+  private async loadRobotsTxt(baseUrl: string): Promise<void> {
+    try {
+      const robotsUrl = new URL('/robots.txt', baseUrl).toString();
+      logger.info(`Loading robots.txt from ${robotsUrl}`);
+      
+      const response = await axios.get(robotsUrl, { timeout: 5000 });
+      if (response.status === 200) {
+        this.robotsTxt = robotsParser(robotsUrl, response.data);
+        logger.info(`Robots.txt successfully loaded from ${robotsUrl}`);
+      } else {
+        logger.warn(`Failed to load robots.txt from ${robotsUrl} - status: ${response.status}`);
+        this.robotsTxt = null;
+      }
+    } catch (error) {
+      logger.warn(`Error loading robots.txt: ${error}`);
+      this.robotsTxt = null;
+    }
+  }
+
+  /**
+   * Check if URL is allowed by robots.txt
+   */
+  private isAllowedByRobotsTxt(url: string): boolean {
+    if (!this.robotsTxt) {
+      return true; // If we can't load robots.txt, we assume everything is allowed
+    }
+    
+    return this.robotsTxt.isAllowed(url, 'DocMCPBot');
+  }
+
+  /**
    * Crawl a single page and extract its content
    */
   private async crawlPage(url: string, depth: number, options: CrawlOptions): Promise<CrawlResult> {
@@ -182,6 +231,8 @@ export class CrawlerService {
 
     // Extract links
     const links = new Set<string>();
+    
+    // Process regular links
     $('a').each((_: number, element: any) => {
       const href = $(element).attr('href');
       if (href) {
@@ -196,6 +247,9 @@ export class CrawlerService {
         }
       }
     });
+    
+    // Handle pagination links specifically
+    this.extractPaginationLinks($, url, options.baseUrl, links);
 
     // Extract metadata
     // This is a basic implementation - you might need to adjust based on the site structure
@@ -214,5 +268,44 @@ export class CrawlerService {
       level: depth,
       links: Array.from(links),
     };
+  }
+
+  /**
+   * Extract pagination links from a page
+   */
+  private extractPaginationLinks($: any, currentUrl: string, baseUrl: string, links: Set<string>): void {
+    // Common pagination selectors - expand this list based on documentation sites you need to support
+    const paginationSelectors = [
+      '.pagination a', // Generic
+      '.pager a',      // Generic
+      'nav.pagination a', // Common in docs
+      'ul.pager a',    // Bootstrap style
+      '.next-page',    // Common 'next' button
+      '.prev-page',    // Common 'previous' button
+      '[aria-label="Next"]', // Accessibility labeled buttons
+      '[aria-label="Previous"]',
+      '.page-navigation a', // Documentation specific
+      '.doc-navigation a',  // Documentation specific
+    ];
+    
+    // Join selectors with commas for a single query
+    const selector = paginationSelectors.join(',');
+    
+    // Find and process pagination links
+    $(selector).each((_: number, element: any) => {
+      const href = $(element).attr('href');
+      if (href) {
+        try {
+          const absoluteUrl = new URL(href, currentUrl).toString();
+          // Only include links from the same domain
+          if (absoluteUrl.startsWith(baseUrl)) {
+            links.add(absoluteUrl);
+            logger.debug(`Found pagination link: ${absoluteUrl}`);
+          }
+        } catch (error) {
+          // Invalid URL - ignore
+        }
+      }
+    });
   }
 }
