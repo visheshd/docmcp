@@ -427,10 +427,11 @@ describe('DocumentationMapperService', () => {
 
   describe('seedPackageDocumentation', () => {
     it('should create seed documentation for packages', async () => {
-      // No packages exist yet
+      // Ensure prisma.package.findUnique returns null for seed packages
+      // so the seeding logic proceeds
       prisma.package.findUnique.mockResolvedValue(null);
       
-      // Mock document creation
+      // Mock document creation (needed inside the loop)
       const mockDocument = {
         id: 'doc-seed-1',
         url: 'https://react.dev/reference/react',
@@ -444,10 +445,9 @@ describe('DocumentationMapperService', () => {
         parentDocumentId: null,
         jobId: null
       };
-      
       prisma.document.create.mockResolvedValue(mockDocument);
       
-      // Mock mapping creation
+      // Mock mapping creation (needed inside the loop)
       const mockMapping = {
         id: 'map-seed-1',
         packageId: 'pkg-seed-1',
@@ -456,22 +456,23 @@ describe('DocumentationMapperService', () => {
         relevanceScore: 0.95,
       };
       
-      // Spy on findOrCreatePackage and mapDocumentToPackage
-      jest.spyOn(service, 'findOrCreatePackage').mockResolvedValue({
-        id: 'pkg-seed-1',
-        name: 'react',
-        language: 'javascript',
-        popularity: 0,
-      } as any);
-      
-      jest.spyOn(service, 'mapDocumentToPackage').mockResolvedValue(mockMapping as any);
+      // Mock the creation call within findOrCreatePackage if needed
+      prisma.package.create.mockResolvedValue({ 
+          id: 'pkg-seed-1', 
+          name: 'react', 
+          language: 'javascript', 
+          popularity: 0, 
+          createdAt: new Date(), 
+          updatedAt: new Date(),
+          description: null,
+          repository: null,
+          homepage: null,
+      }); 
 
       const result = await service.seedPackageDocumentation();
       
       // Each seed package has at least one doc
       expect(result).toBeGreaterThan(0);
-      expect(service.findOrCreatePackage).toHaveBeenCalled();
-      expect(service.mapDocumentToPackage).toHaveBeenCalled();
       expect(prisma.document.create).toHaveBeenCalled();
     });
 

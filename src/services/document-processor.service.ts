@@ -9,6 +9,7 @@ import { ChunkService } from './chunk.service';
 import { DocumentService } from './document.service';
 import axios from 'axios';
 import config from '../config'; // Import the config
+import { URL } from 'url'; // Import URL for robust path joining
 
 // Define the metadata structure
 interface MetadataExtracted {
@@ -94,7 +95,11 @@ export class DocumentProcessorService {
    */
   async createEmbedding(text: string): Promise<number[]> {
     try {
-      const response = await axios.post(config.ollama.apiUrl, {
+      // Construct the full API endpoint URL
+      const endpoint = new URL('/api/embeddings', config.ollama.apiUrl).toString();
+      logger.debug(`Sending embedding request to: ${endpoint}`);
+      
+      const response = await axios.post(endpoint, {
         model: config.ollama.embedModel,
         prompt: text
       });
@@ -771,10 +776,12 @@ export class DocumentProcessorService {
       const createEmbedding = async (text: string): Promise<number[]> => {
         const maxRetries = 3;
         const retryDelay = 1000; // 1 second
+        const endpoint = new URL('/api/embeddings', config.ollama.apiUrl).toString();
+        logger.debug(`Sending embedding request to: ${endpoint}`);
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
-            const response = await axios.post(ollamaApiUrl, {
+            const response = await axios.post(endpoint, {
               model: ollamaModel,
               prompt: text,
             });
