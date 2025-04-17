@@ -62,6 +62,64 @@ The DocMCP system processes documentation through the following pipeline:
 
 This pipeline enables efficient storage, processing, and retrieval of documentation with semantic understanding capabilities. All steps are tracked through the job system, allowing detailed progress monitoring and error handling.
 
+## Getting Started (Docker Recommended)
+
+Using Docker and Docker Compose is the easiest and recommended way to get DocMCP and its dependencies (PostgreSQL + pgvector) running locally for development and testing with AI agents like Cursor.
+
+### Prerequisites (Docker Setup)
+
+- Docker ([Install Guide](https://docs.docker.com/engine/install/))
+- Docker Compose ([Install Guide](https://docs.docker.com/compose/install/))
+- Git
+- An accessible Ollama API instance (e.g., running locally on your host machine)
+
+### Quick Start Steps (Docker)
+
+1.  **Clone the Repository:**
+    ```bash
+    git clone https://github.com/yourusername/docmcp.git
+    cd docmcp
+    ```
+
+2.  **Configure Environment:**
+    *   Copy the example environment file:
+        ```bash
+        cp .env.example .env
+        ```
+    *   **Edit the `.env` file:**
+        *   Verify `DATABASE_URL`. The default usually works with the included Docker Compose PostgreSQL service.
+        *   **Crucially, set `OLLAMA_API_URL`** to the URL of your running Ollama instance. If Ollama is running on your host machine, you might use `http://host.docker.internal:11434` (on Docker Desktop for Mac/Windows) or the host's IP address. Ensure this URL is accessible *from within the Docker container*.
+        *   Adjust other settings like `LOG_LEVEL` if needed.
+
+3.  **Start the Application:**
+    ```bash
+    ./docker-start.sh 
+    ```
+    This script handles:
+    *   Creating necessary directories.
+    *   Setting file permissions.
+    *   Building the Docker images (if not already built).
+    *   Starting the `app` and `postgres` containers.
+    *   **Automatically applying Prisma database migrations** within the `app` container upon startup.
+    *   Displaying the application's base URL (usually `http://localhost:1337`).
+
+4.  **Verify Services:**
+    *   Check Docker Desktop or run `docker ps` to see the `docmcp-app` and `docmcp-postgres` containers running.
+    *   Check logs (`docker-compose logs -f app`) for any startup errors, especially related to database connection or migrations.
+
+5.  **(First Time Setup) Verify Seed Data:**
+    *   DocMCP includes seed data for common packages.
+    *   The `DocumentationMapperService` automatically seeds this data the first time it starts if the database is empty.
+    *   Check application logs (`docker-compose logs -f app`) for seeding messages to confirm.
+    *   This ensures some documentation is available immediately.
+
+6.  **Stop the Application:**
+    ```bash
+    ./docker-stop.sh
+    ```
+
+Now that the service is running, you can proceed to integrate it with your AI agent (see "Integrating with AI Agents" section below) or explore other features.
+
 ## Project Structure
 
 ```
@@ -97,106 +155,9 @@ docmcp/
 └── package.json             # Project dependencies and scripts
 ```
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js 16+
-- PostgreSQL with pgvector extension
-- Ollama API for vector embeddings
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/docmcp.git
-cd docmcp
-
-# Install dependencies
-npm install
-
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your configuration
-
-# Run database migrations
-npx prisma migrate deploy
-```
-
-### Usage
-
-Start the server:
-
-```bash
-npm run dev
-```
-
-## Docker Deployment
-
-DocMCP can be easily deployed using Docker and Docker Compose.
-
-### Prerequisites
-
-- Docker
-- Docker Compose
-
-### Quick Start
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/docmcp.git
-   cd docmcp
-   ```
-
-2. Start the application:
-   ```bash
-   ./docker-start.sh
-   ```
-
-   This script will:
-   - Create necessary directories
-   - Set up proper permissions
-   - Build and start the containers
-   - Display the URL to access the application
-
-3. Stop the application:
-   ```bash
-   ./docker-stop.sh
-   ```
-
-### Configuration
-
-The Docker setup includes:
-
-- **Application Container**: Node.js application running the DocMCP server
-- **PostgreSQL Container**: Database with pgvector extension for vector operations
-- **Persistent Volumes**: Data is preserved between container restarts
-- **Health Checks**: Automatic monitoring of service health
-- **Environment Variables**: Configured in docker-compose.yml
-
-To customize the configuration, edit the following files:
-
-- `docker-compose.yml`: Container setup and environment variables
-- `.env`: Application configuration (create from .env.example)
-- `Dockerfile`: Application build process
-
-### Accessing Logs
-
-View logs for all services:
-```bash
-docker-compose logs -f
-```
-
-View logs for a specific service:
-```bash
-docker-compose logs -f app
-# or
-docker-compose logs -f postgres
-```
-
 ## Integrating with AI Agents (like Cursor)
 
-Once the DocMCP service is running via Docker (using `./docker-start.sh` or `./docker-start-prod.sh`), the MCP API endpoint is available for integration with AI agents.
+Once the DocMCP service is running via Docker (using `./docker-start.sh`), the MCP API endpoint is ready for integration.
 
 **Endpoint:**
 
@@ -204,11 +165,12 @@ Once the DocMCP service is running via Docker (using `./docker-start.sh` or `./d
 
 **Usage:**
 
-1.  **Start DocMCP:** Ensure the Docker containers are running.
-2.  **Configure Agent:** Configure your AI agent (like Cursor) to use `http://localhost:1337/mcp` as the base URL for accessing DocMCP's tools.
-3.  **Use Tools:** The agent can now make POST requests to this endpoint to call the available MCP tools (e.g., `add_documentation`, `query_documentation`, `list_documentation`, `get_job_status`) as described in the "Available MCP Tools" section.
+1.  **Start DocMCP:** Ensure the Docker containers are running (`./docker-start.sh`).
+2.  **Verify Ollama Access:** Confirm that your Ollama instance (specified in `.env`) is running and accessible from the DocMCP Docker container. Test this if unsure.
+3.  **Configure Agent:** Configure your AI agent (like Cursor) to use `http://localhost:1337/mcp` as the base URL for accessing DocMCP's tools.
+4.  **Use Tools:** The agent can now make POST requests to this endpoint to call the available MCP tools (e.g., `add_documentation`, `query_documentation`, `list_documentation`, `get_job_status`) as described below.
 
-**Note:** If your AI agent is running on a different machine or within a different Docker network than the DocMCP containers, replace `localhost` with the appropriate IP address or hostname of the machine running the DocMCP Docker containers. Ensure any necessary firewall rules are adjusted to allow connectivity.
+**Note:** If your agent is running outside the Docker network, `localhost` should work if the agent is on the same host machine. If the agent is elsewhere, use the host machine's IP address and ensure firewalls permit access to port 1337.
 
 ## Adding Documentation
 
@@ -260,6 +222,127 @@ All tools are accessible through the MCP endpoint at `POST /mcp` with the follow
     // Tool-specific parameters
   }
 }
+```
+
+## Context-Aware Documentation Queries
+
+The `query_documentation` MCP tool offers enhanced functionality by incorporating code context to deliver more relevant and targeted documentation results.
+
+### How It Works
+
+1.  **Context Input:** The tool accepts an optional `context` parameter containing a code snippet (e.g., the code currently being edited).
+2.  **Analysis:** The backend `CodeContextService` parses this snippet using utilities in `src/utils/code-parser.ts` to:
+    *   Detect imported packages/libraries (e.g., `react`, `prisma`).
+    *   Identify key identifiers (function names, class names) within the code.
+3.  **Mapping & Enhancement:**
+    *   It looks up potentially relevant documentation associated with the detected packages using the `DocumentationMapperService`.
+    *   It may generate an "enhanced query" string that refines the original user query with terms related to the detected packages and identifiers.
+4.  **Search & Boosting:**
+    *   The system performs a semantic search using the (potentially enhanced) query embedding generated via Ollama.
+    *   Search results (chunks) originating from documents deemed relevant by the context analysis receive a relevance score boost.
+5.  **Output:** The tool returns:
+    *   Standard documentation results, sorted by relevance (incorporating context boost).
+    *   A `summary` section detailing the context analysis performed (detected packages, if the query was enhanced).
+    *   Potentially, direct `packageSuggestions` for documentation specifically related to the detected packages.
+
+### Using the Feature
+
+To leverage context-awareness when calling the `query_documentation` MCP tool:
+
+*   Provide the relevant code snippet as a string in the `context` parameter.
+*   The system will automatically attempt package detection and query enhancement.
+*   You can still use the `package` parameter to *force* filtering by a specific package if needed, overriding the context-based filter.
+
+Example MCP Call:
+
+```json
+{
+  "function": "query_documentation",
+  "parameters": {
+    "query": "how to handle async effects",
+    "context": "import React, { useState, useEffect } from 'react';\n\nfunction MyComponent() {\n  const [data, setData] = useState(null);\n  useEffect(() => {\n    async function fetchData() {\n      const response = await fetch('/api/data');\n      const result = await response.json();\n      setData(result);\n    }\n    fetchData();\n  }, []);\n\n  return <div>{data ? JSON.stringify(data) : 'Loading...'}</div>;\n}"
+  }
+}
+```
+
+### Extending the System
+
+Developers can modify or extend the context-aware functionality:
+
+*   **Code Parsing:** Enhance language support or improve parsing accuracy in `src/utils/code-parser.ts`.
+*   **Context Analysis Logic:** Adjust how packages are detected, relevant documents are identified, or how the enhanced query is constructed within `src/services/code-context.service.ts`.
+*   **Relevance Tuning:** Modify the scoring adjustments (e.g., the boost applied for contextually relevant documents) within the `queryDocumentationHandler` in `src/services/mcp-tools/query-documentation.tool.ts`.
+*   **Package Mapping:** Improve the underlying data connecting packages to their documentation via the `DocumentationMapperService` and associated Prisma models.
+
+## Manual Setup (Without Docker - Not Recommended for MCP Usage)
+
+If you prefer not to use Docker, you can run the application manually.
+
+### Prerequisites (Manual Setup)
+
+- Node.js 16+
+- PostgreSQL with pgvector extension (must be installed and running separately)
+- Ollama API accessible for vector embeddings
+
+### Installation Steps (Manual)
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/docmcp.git
+cd docmcp
+
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .env.example .env
+# EDIT .env with your configuration (DATABASE_URL, OLLAMA_API_URL, etc.)
+
+# Ensure your PostgreSQL + pgvector DB is running and accessible
+# Ensure your Ollama service is running and accessible
+
+# Run database migrations
+npx prisma migrate deploy
+```
+
+### Usage (Manual)
+
+Start the server:
+
+```bash
+npm run dev
+```
+
+Note: The seed data will also attempt to run automatically on the first start with a manual setup if the database is empty.
+
+## Docker Configuration Details 
+
+The Docker setup includes:
+
+- **Application Container**: Node.js application running the DocMCP server
+- **PostgreSQL Container**: Database with pgvector extension for vector operations
+- **Persistent Volumes**: Data is preserved between container restarts
+- **Health Checks**: Automatic monitoring of service health
+- **Environment Variables**: Configured in docker-compose.yml
+
+To customize the configuration, edit the following files:
+
+- `docker-compose.yml`: Container setup and environment variables
+- `.env`: Application configuration (create from .env.example)
+- `Dockerfile`: Application build process
+
+### Accessing Logs
+
+View logs for all services:
+```bash
+docker-compose logs -f
+```
+
+View logs for a specific service:
+```bash
+docker-compose logs -f app
+# or
+docker-compose logs -f postgres
 ```
 
 ## Job Management Pattern
