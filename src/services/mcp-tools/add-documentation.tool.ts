@@ -175,6 +175,7 @@ export const addDocumentationHandler = async (params: AddDocumentationParams) =>
   // }
   // (Other validations like maxDepth, rateLimit also handled by Zod)
 
+  console.log('Add documentation tool called with params:', params);
   try {
     const prisma = params._prisma || getMainPrismaClient();
     const jobService = new JobService(prisma);

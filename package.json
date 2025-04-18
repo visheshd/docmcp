@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc",
+    "build": "tsc && npm run copy-prisma-assets",
+    "copy-prisma-assets": "mkdir -p dist/generated && cp -r src/generated/prisma dist/generated/",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "test": "prisma generate && jest --runInBand",

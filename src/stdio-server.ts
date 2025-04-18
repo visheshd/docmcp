@@ -10,109 +10,58 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+// Import MCP tools
+import { sampleToolSchema, sampleToolHandler } from './services/mcp-tools/sample.tool.js';
+import { getJobStatusSchema, getJobStatusHandler } from './services/mcp-tools/get-job-status.tool.js';
+import { addDocumentationSchema, addDocumentationHandler } from './services/mcp-tools/add-documentation.tool.js';
+import { listDocumentationSchema, listDocumentationHandler } from './services/mcp-tools/list-documentation.tool.js';
+import { queryDocumentationSchema, queryDocumentationHandler } from './services/mcp-tools/query-documentation.tool.js';
+
 // Create an MCP server
 const server = new McpServer({
   name: "stdio-server",
   version: "1.0.0"
 }, { capabilities: { logging: {} } });
 
-// Register a simple tool that sends notifications over time
+// Register MCP tools from the services/mcp-tools directory
+// Sample tool
 server.tool(
-  'start-notification-stream',
-  'Starts sending periodic notifications for testing resumability',
-  {
-    interval: z.number().describe('Interval in milliseconds between notifications').default(100),
-    count: z.number().describe('Number of notifications to send (0 for unlimited)').default(50),
-  },
-  async ({ interval, count }, { sendNotification }): Promise<CallToolResult> => {
-    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    let counter = 0;
-
-    while (count === 0 || counter < count) {
-      counter++;
-      try {
-        await sendNotification({
-          method: "notifications/message",
-          params: {
-            level: "info",
-            data: `Periodic notification #${counter} at ${new Date().toISOString()}`
-          }
-        });
-      }
-      catch (error) {
-        console.error("Error sending notification:", error);
-      }
-      // Wait for the specified interval
-      await sleep(interval);
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Started sending periodic notifications every ${interval}ms`,
-        }
-      ],
-    };
-  }
+  "sample",
+  "Sample echo tool for demonstration purposes",
+  sampleToolSchema,
+  sampleToolHandler
 );
 
-// Add a simple addition tool
+// Get job status tool
 server.tool(
-  "add",
-  "Simple addition function",
-  { 
-    a: z.number().describe("First number"), 
-    b: z.number().describe("Second number") 
-  },
-  async ({ a, b }) => ({
-    content: [{ type: "text", text: `The sum is: ${a + b}` }]
-  })
+  "get-job-status",
+  "Check the status and progress of a job in the system",
+  getJobStatusSchema,
+  getJobStatusHandler
 );
 
-// Add a greeting tool
+// Add documentation tool
 server.tool(
-  "greet",
-  "Simple greeting function",
-  { 
-    name: z.string().describe("Name to greet").default("User") 
-  },
-  async ({ name }) => ({
-    content: [{ type: "text", text: `Hello, ${name}!` }]
-  })
+  "add-documentation",
+  "Add documentation to the knowledge base",
+  addDocumentationSchema,
+  addDocumentationHandler
 );
 
-// Add a multi-greet tool that also sends notifications
+// List documentation tool
 server.tool(
-  "multi-greet",
-  "Greeting tool with notifications",
-  { 
-    name: z.string().describe("Name to greet").default("User") 
-  },
-  async ({ name }, { sendNotification }) => {
-    // Send a couple of notifications
-    await sendNotification({
-      method: "notifications/message",
-      params: {
-        level: "info",
-        data: `Preparing greeting for ${name}...`
-      }
-    });
+  "list-documentation",
+  "List available documentation in the knowledge base",
+  listDocumentationSchema,
+  listDocumentationHandler
+);
 
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    await sendNotification({
-      method: "notifications/message",
-      params: {
-        level: "info",
-        data: `Greeting ready for ${name}!`
-      }
-    });
-
-    return {
-      content: [{ type: "text", text: `Hello, ${name}! This greeting came with notifications.` }]
-    };
-  }
+// Query documentation tool
+server.tool(
+  "query-documentation",
+  "Query the knowledge base for relevant documentation",
+  queryDocumentationSchema,
+  queryDocumentationHandler
 );
 
 // Set up connection close handler
