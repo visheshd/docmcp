@@ -39,4 +39,4 @@ fi
 
 # Start the application
 echo "Starting DocMCP server..."
-exec node dist/index.js 
+exec node dist/server.js 

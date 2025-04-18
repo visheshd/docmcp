@@ -2,10 +2,10 @@
   "name": "docmcp",
   "version": "1.0.0",
   "description": "Documentation Agent MCP - A self-hosted MCP server for accessing up-to-date technical documentation",
-  "main": "dist/index.js",
+  "main": "dist/server.js",
   "scripts": {
-    "start": "node dist/index.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "start": "node dist/server.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
@@ -24,7 +24,7 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
-    "@modelcontextprotocol/sdk": "^1.9.0",
+    "@modelcontextprotocol/sdk": "^1.10.0",
     "@nestjs/common": "^11.0.17",
     "@prisma/client": "^6.6.0",
     "axios": "^1.8.4",

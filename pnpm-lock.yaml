@@ -12,8 +12,8 @@ importers:
         specifier: ^0.39.0
         version: 0.39.0
       '@modelcontextprotocol/sdk':
-        specifier: ^1.9.0
-        version: 1.9.0
+        specifier: ^1.10.0
+        version: 1.10.0
       '@nestjs/common':
         specifier: ^11.0.17
         version: 11.0.17(file-type@20.4.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -833,8 +833,8 @@ packages:
   '@mixmark-io/domino@2.2.0':
     resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==}
 
-  '@modelcontextprotocol/sdk@1.9.0':
-    resolution: {integrity: sha512-Jq2EUCQpe0iyO5FGpzVYDNFR6oR53AIrwph9yWl7uSc7IWUMsrmpmSaTGra5hQNunXpM+9oit85p924jWuHzUA==}
+  '@modelcontextprotocol/sdk@1.10.0':
+    resolution: {integrity: sha512-wijOavYZfSOADbVM0LA7mrQ17N4IKNdFcfezknCCsZ1Y1KstVWlkDZ5ebcxuQJmqTTxsNjBHLc7it1SV0TBiPg==}
     engines: {node: '>=18'}
 
   '@mswjs/interceptors@0.38.3':
@@ -4396,7 +4396,7 @@ snapshots:
 
   '@mixmark-io/domino@2.2.0': {}
 
-  '@modelcontextprotocol/sdk@1.9.0':
+  '@modelcontextprotocol/sdk@1.10.0':
     dependencies:
       content-type: 1.0.5
       cors: 2.8.5
@@ -5589,7 +5589,7 @@ snapshots:
 
   fastmcp@1.21.0:
     dependencies:
-      '@modelcontextprotocol/sdk': 1.9.0
+      '@modelcontextprotocol/sdk': 1.10.0
       '@standard-schema/spec': 1.0.0
       execa: 9.5.2
       file-type: 20.4.1
@@ -6495,7 +6495,7 @@ snapshots:
 
   mcp-proxy@2.12.0:
     dependencies:
-      '@modelcontextprotocol/sdk': 1.9.0
+      '@modelcontextprotocol/sdk': 1.10.0
       eventsource: 3.0.6
       yargs: 17.7.2
     transitivePeerDependencies:

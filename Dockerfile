@@ -30,6 +30,8 @@ COPY pnpm-lock.yaml ./
 
 # Set NODE_ENV to production
 ENV NODE_ENV=production
+# Set log level to debug
+ENV LOG_LEVEL=debug
 
 # Install production dependencies only
 RUN npm install -g pnpm && \
