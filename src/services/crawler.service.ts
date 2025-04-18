@@ -12,7 +12,19 @@ interface CrawlOptions {
   baseUrl: string;
   rateLimit?: number; // milliseconds between requests
   respectRobotsTxt?: boolean; // whether to respect robots.txt rules
+  randomDelay?: boolean; // whether to add random delay between requests
+  minDelay?: number; // minimum delay in milliseconds
+  maxDelay?: number; // maximum delay in milliseconds
+  userAgent?: string; // user agent to use for requests
 }
+
+// Common user agents for spoofing
+const USER_AGENTS = {
+  GOOGLEBOT: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+  CHROME: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+  SAFARI: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.1 Safari/605.1.15',
+  FIREFOX: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0'
+};
 
 interface CrawlResult {
   url: string;
@@ -34,6 +46,10 @@ export class CrawlerService {
   private documentService: DocumentService;
   private prisma: PrismaClient;
   private robotsTxt: any = null;
+  // Track errors for reporting
+  private errorCount: number = 0;
+  private pagesSkipped: number = 0;
+  private pagesProcessed: number = 0;
 
   constructor(prismaClient?: PrismaClient) {
     this.prisma = prismaClient || getMainPrismaClient();
@@ -49,11 +65,29 @@ export class CrawlerService {
       baseUrl: new URL(startUrl).origin,
       rateLimit: 1000, // 1 second between requests by default
       respectRobotsTxt: true, // respect robots.txt by default
+      randomDelay: true, // use random delays between requests
+      minDelay: 1500, // minimum 1.5 seconds between requests
+      maxDelay: 5000, // maximum 5 seconds between requests
+      userAgent: USER_AGENTS.GOOGLEBOT, // default to Googlebot user agent
     };
 
     const crawlOptions = { ...defaultOptions, ...options };
     this.urlQueue = [{ url: startUrl, depth: 0 }];
     this.visitedUrls.clear();
+    // Reset counters
+    this.errorCount = 0;
+    this.pagesSkipped = 0;
+    this.pagesProcessed = 0;
+
+    // Log the crawl configuration
+    logger.info(`Starting crawl with options:`, {
+      maxDepth: crawlOptions.maxDepth,
+      baseUrl: crawlOptions.baseUrl,
+      rateLimit: crawlOptions.rateLimit,
+      respectRobotsTxt: crawlOptions.respectRobotsTxt,
+      randomDelay: crawlOptions.randomDelay,
+      userAgent: crawlOptions.userAgent
+    });
 
     // Load robots.txt if enabled
     if (crawlOptions.respectRobotsTxt) {
@@ -62,6 +96,37 @@ export class CrawlerService {
 
     try {
       while (this.urlQueue.length > 0) {
+        // Check if job should be cancelled
+        const jobStatus = await this.prisma.job.findUnique({
+          where: { id: jobId },
+          select: { shouldCancel: true, shouldPause: true }
+        });
+
+        if (jobStatus?.shouldCancel) {
+          logger.info(`Job ${jobId} was cancelled. Stopping crawl.`);
+          await this.prisma.job.update({
+            where: { id: jobId },
+            data: {
+              status: 'cancelled',
+              endDate: new Date(),
+              progress: this.visitedUrls.size / (this.visitedUrls.size + this.urlQueue.length),
+            },
+          });
+          return; // Exit early
+        }
+
+        if (jobStatus?.shouldPause) {
+          logger.info(`Job ${jobId} was paused. Stopping crawl.`);
+          await this.prisma.job.update({
+            where: { id: jobId },
+            data: {
+              status: 'paused',
+              progress: this.visitedUrls.size / (this.visitedUrls.size + this.urlQueue.length),
+            },
+          });
+          return; // Exit early
+        }
+
         const { url, depth } = this.urlQueue.shift()!;
         
         if (depth > crawlOptions.maxDepth) {
@@ -75,12 +140,15 @@ export class CrawlerService {
         // Check robots.txt rules if enabled
         if (crawlOptions.respectRobotsTxt && this.robotsTxt && !this.isAllowedByRobotsTxt(url)) {
           logger.info(`Skipping ${url} (disallowed by robots.txt)`);
+          this.pagesSkipped++;
           continue;
         }
 
         try {
+          logger.info(`Crawling: ${url} (depth: ${depth})`);
           const result = await this.crawlPage(url, depth, crawlOptions);
           this.visitedUrls.add(url);
+          this.pagesProcessed++;
 
           // Create document record, including the jobId
           await this.documentService.createDocument({
@@ -100,72 +168,232 @@ export class CrawlerService {
             }
           }
 
-          // Update job progress
-          await this.prisma.job.update({
-            where: { id: jobId },
-            data: {
-              progress: this.visitedUrls.size / (this.visitedUrls.size + this.urlQueue.length),
-              stats: {
-                pagesProcessed: this.visitedUrls.size,
-                pagesSkipped: 0,
-                totalChunks: this.visitedUrls.size,
-              },
-            },
-          });
+          // Update job progress and stats
+          await this.updateJobProgress(jobId);
 
-          // Respect rate limiting
-          if (crawlOptions.rateLimit) {
-            await new Promise(resolve => setTimeout(resolve, crawlOptions.rateLimit));
-          }
+          // Apply delay between requests
+          await this.applyDelay(crawlOptions);
         } catch (error) {
-          logger.error(`Error crawling ${url}:`, error);
-          // Update job with error but continue crawling
-          await this.prisma.job.update({
-            where: { id: jobId },
-            data: {
-              error: `Error crawling ${url}: ${error}`,
-              progress: this.visitedUrls.size / (this.visitedUrls.size + this.urlQueue.length),
-            },
-          });
-          // Re-throw the error to be caught by the outer block
-          throw error;
+          // Handle specific error types
+          if (axios.isAxiosError(error)) {
+            // Mark URL as visited to prevent retries
+            this.visitedUrls.add(url);
+            this.errorCount++;
+            this.pagesSkipped++;
+            
+            if (error.response) {
+              // Server responded with an error status code
+              const statusCode = error.response.status;
+              
+              if (statusCode === 404) {
+                logger.warn(`Page not found (404): ${url} - Skipping and continuing.`);
+              } else if (statusCode === 403 || statusCode === 401) {
+                logger.warn(`Access denied (${statusCode}): ${url} - Skipping and continuing.`);
+              } else if (statusCode >= 500) {
+                logger.warn(`Server error (${statusCode}): ${url} - Skipping and continuing.`);
+              } else {
+                logger.warn(`HTTP error (${statusCode}): ${url} - Skipping and continuing.`);
+              }
+              
+              // Update job with warning but continue crawling
+              await this.prisma.job.update({
+                where: { id: jobId },
+                data: {
+                  error: `${this.errorCount} errors during crawling. Latest: HTTP ${statusCode} at ${url}`,
+                  errorCount: this.errorCount,
+                  lastError: new Date(),
+                  itemsFailed: this.errorCount,
+                  itemsSkipped: this.pagesSkipped,
+                }
+              });
+            } else if (error.request) {
+              // Request was made but no response received (network error)
+              logger.warn(`Network error for ${url} - Skipping and continuing.`);
+              
+              // Update job with warning but continue crawling
+              await this.prisma.job.update({
+                where: { id: jobId },
+                data: {
+                  error: `${this.errorCount} errors during crawling. Latest: Network error at ${url}`,
+                  errorCount: this.errorCount,
+                  lastError: new Date(),
+                  itemsFailed: this.errorCount,
+                  itemsSkipped: this.pagesSkipped,
+                }
+              });
+            } else {
+              // Something else went wrong
+              logger.warn(`Error crawling ${url}: ${error.message} - Skipping and continuing.`);
+              
+              // Update job with warning but continue crawling
+              await this.prisma.job.update({
+                where: { id: jobId },
+                data: {
+                  error: `${this.errorCount} errors during crawling. Latest: ${error.message} at ${url}`,
+                  errorCount: this.errorCount,
+                  lastError: new Date(),
+                  itemsFailed: this.errorCount,
+                  itemsSkipped: this.pagesSkipped,
+                }
+              });
+            }
+          } else {
+            // Non-Axios error - likely a parsing error or other issue
+            this.visitedUrls.add(url);
+            this.errorCount++;
+            this.pagesSkipped++;
+            
+            logger.warn(`Error processing ${url}: ${error} - Skipping and continuing.`);
+            
+            // Update job with warning but continue crawling
+            await this.prisma.job.update({
+              where: { id: jobId },
+              data: {
+                error: `${this.errorCount} errors during crawling. Latest: Processing error at ${url}: ${error}`,
+                errorCount: this.errorCount,
+                lastError: new Date(),
+                itemsFailed: this.errorCount,
+                itemsSkipped: this.pagesSkipped,
+              }
+            });
+          }
+          
+          // Update job progress despite error
+          await this.updateJobProgress(jobId);
+          
+          // Add delay after error before continuing
+          await this.applyDelay(crawlOptions);
+          
+          // Continue with next URL - do NOT re-throw the error
         }
       }
 
-      // Mark job as completed when all URLs are processed - Moved to finally block
-      // await this.prisma.job.update({
-      //   where: { id: job.id },
-      //   data: {
-      //     status: 'completed',
-      //     endDate: new Date(),
-      //     progress: 1,
-      //   },
-      // });
+      // The crawl completed normally
+      logger.info(`Crawl finished successfully for job ${jobId}.`);
+      
     } catch (error) {
-      logger.error('Crawl failed:', error);
-      // Error is already logged in the job record by the inner catch or here
-      // We just need to ensure the final status is set in `finally`
-      // No need to update here anymore, but we still re-throw
-      throw error; 
+      // This should only catch unexpected errors outside the URL processing loop
+      logger.error('Unexpected error during crawl:', error);
+      // We'll mark the job as failed in the finally block
     } finally {
-      // Ensure the job is always marked as completed
+      // Ensure the job is always marked with final status
       logger.info(`Crawl finished for job ${jobId}. Updating status.`);
       try {
+        // Check if there were too many errors
+        const failureThreshold = 0.75; // 75% of pages failed
+        const totalPages = this.pagesProcessed + this.pagesSkipped;
+        const errorRate = totalPages > 0 ? this.errorCount / totalPages : 0;
+        
+        // Determine final status
+        let finalStatus: 'completed' | 'failed';
+        if (this.errorCount > 0 && errorRate >= failureThreshold) {
+          finalStatus = 'failed';
+          logger.warn(`Job ${jobId} marked as failed due to high error rate (${errorRate.toFixed(2)})`);
+        } else {
+          finalStatus = 'completed';
+          logger.info(`Job ${jobId} completed with ${this.errorCount} errors out of ${totalPages} pages`);
+        }
+        
         await this.prisma.job.update({
           where: { id: jobId },
           data: {
-            status: 'completed', 
+            status: finalStatus, 
             endDate: new Date(),
-            // Ensure progress is 1 if successful, otherwise keep last calculated progress
-            progress: (await this.prisma.job.findUnique({ where: { id: jobId }, select: { error: true } }))?.error ? 
-                      this.visitedUrls.size / (this.visitedUrls.size + this.urlQueue.length) : 1,
+            // Set progress to 1 if completed
+            progress: 1,
+            // Update final statistics
+            stats: {
+              pagesProcessed: this.pagesProcessed,
+              pagesSkipped: this.pagesSkipped, 
+              totalChunks: this.pagesProcessed,
+              errorCount: this.errorCount,
+              errorRate: errorRate
+            },
+            itemsProcessed: this.pagesProcessed,
+            itemsSkipped: this.pagesSkipped,
+            itemsFailed: this.errorCount,
+            itemsTotal: this.pagesProcessed + this.pagesSkipped
           },
         });
-        logger.info(`Job ${jobId} status updated to completed.`);
+        logger.info(`Job ${jobId} status updated to ${finalStatus}.`);
       } catch (updateError) {
         logger.error(`Failed to update final job status for job ${jobId}:`, updateError);
       }
     }
+  }
+
+  /**
+   * Update job progress and statistics
+   */
+  private async updateJobProgress(jobId: string): Promise<void> {
+    try {
+      const totalUrls = this.visitedUrls.size + this.urlQueue.length;
+      const progress = totalUrls > 0 ? this.visitedUrls.size / totalUrls : 0;
+      
+      // Calculate time estimates
+      const job = await this.prisma.job.findUnique({
+        where: { id: jobId },
+        select: { startDate: true }
+      });
+      
+      let timeElapsed = 0;
+      let timeRemaining = 0;
+      
+      if (job) {
+        timeElapsed = Math.floor((Date.now() - job.startDate.getTime()) / 1000); // in seconds
+        
+        // Estimate remaining time based on progress
+        if (progress > 0) {
+          timeRemaining = Math.floor((timeElapsed / progress) - timeElapsed);
+        }
+      }
+      
+      // Calculate estimated completion time
+      const estimatedCompletion = timeRemaining > 0 
+        ? new Date(Date.now() + (timeRemaining * 1000)) 
+        : undefined;
+      
+      await this.prisma.job.update({
+        where: { id: jobId },
+        data: {
+          progress,
+          stats: {
+            pagesProcessed: this.pagesProcessed,
+            pagesSkipped: this.pagesSkipped,
+            totalChunks: this.pagesProcessed,
+            errorCount: this.errorCount
+          },
+          itemsProcessed: this.pagesProcessed,
+          itemsSkipped: this.pagesSkipped,
+          itemsFailed: this.errorCount,
+          itemsTotal: this.pagesProcessed + this.pagesSkipped + this.urlQueue.length,
+          timeElapsed,
+          timeRemaining,
+          estimatedCompletion,
+          lastActivity: new Date()
+        },
+      });
+    } catch (error) {
+      logger.warn(`Failed to update job progress for job ${jobId}:`, error);
+      // Non-critical error, we can continue
+    }
+  }
+
+  /**
+   * Apply delay between requests based on the configured options
+   */
+  private async applyDelay(options: CrawlOptions): Promise<void> {
+    let delay = options.rateLimit || 1000;
+
+    if (options.randomDelay && options.minDelay !== undefined && options.maxDelay !== undefined) {
+      // Calculate a random delay between minDelay and maxDelay
+      delay = Math.floor(Math.random() * (options.maxDelay - options.minDelay + 1)) + options.minDelay;
+      logger.debug(`Applying random delay of ${delay}ms before next request`);
+    } else {
+      logger.debug(`Applying fixed delay of ${delay}ms before next request`);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, delay));
   }
 
   /**
@@ -198,14 +426,30 @@ export class CrawlerService {
       return true; // If we can't load robots.txt, we assume everything is allowed
     }
     
-    return this.robotsTxt.isAllowed(url, 'DocMCPBot');
+    return this.robotsTxt.isAllowed(url, 'Googlebot');
   }
 
   /**
    * Crawl a single page and extract its content
    */
   private async crawlPage(url: string, depth: number, options: CrawlOptions): Promise<CrawlResult> {
-    const response = await axios.get(url);
+    // Configure request headers with user agent
+    const headers = {
+      'User-Agent': options.userAgent || USER_AGENTS.GOOGLEBOT,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+      'Cache-Control': 'max-age=0',
+    };
+
+    const response = await axios.get(url, { 
+      headers,
+      timeout: 15000, // 15 second timeout
+      maxRedirects: 5  // Maximum 5 redirects
+    });
+    
     const $ = cheerio.load(response.data);
 
     // Remove script tags, style tags, and comments

@@ -16,6 +16,7 @@ import { getJobStatusSchema, getJobStatusHandler } from './services/mcp-tools/ge
 import { addDocumentationSchema, addDocumentationHandler } from './services/mcp-tools/add-documentation.tool.js';
 import { listDocumentationSchema, listDocumentationHandler } from './services/mcp-tools/list-documentation.tool.js';
 import { queryDocumentationSchema, queryDocumentationHandler } from './services/mcp-tools/query-documentation.tool.js';
+import { retryJobSchema, retryJobHandler } from './services/mcp-tools/retry-job.tool.js';
 
 // Create an MCP server
 const server = new McpServer({
@@ -62,6 +63,14 @@ server.tool(
   "Query the knowledge base for relevant documentation",
   queryDocumentationSchema,
   queryDocumentationHandler
+);
+
+// Retry job tool
+server.tool(
+  "retry-job",
+  "Retry a failed job by creating a new job with the same parameters",
+  retryJobSchema,
+  retryJobHandler
 );
 
 // Set up connection close handler
