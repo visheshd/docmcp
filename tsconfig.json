@@ -19,6 +19,6 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/**/*", "scripts/streamable-http-server/server.ts"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 } 
