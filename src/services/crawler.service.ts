@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import axios from 'axios';
 import { URL } from 'url';
 import { PrismaClient } from '../generated/prisma';
+import { Prisma } from '../generated/prisma';
 import logger from '../utils/logger';
 import { DocumentService } from './document.service';
 import { getPrismaClient as getMainPrismaClient } from '../config/database';
@@ -53,7 +54,7 @@ export class CrawlerService {
 
   constructor(prismaClient?: PrismaClient) {
     this.prisma = prismaClient || getMainPrismaClient();
-    this.documentService = new DocumentService();
+    this.documentService = new DocumentService(this.prisma);
   }
 
   /**
@@ -137,6 +138,30 @@ export class CrawlerService {
           continue;
         }
 
+        // Check for recent existing document
+        const copiedDocument = await this.findAndCopyRecentDocument(url, depth, jobId);
+        
+        if (copiedDocument) {
+          logger.info(`Reused recent document data for ${url} (New ID: ${copiedDocument.id})`);
+          this.visitedUrls.add(url);
+          this.pagesProcessed++; // Count copied documents as processed
+          
+          // Extract links from the copied content
+          const links = this.extractLinksFromHtml(copiedDocument.content, crawlOptions.baseUrl, url);
+          logger.debug(`Extracted ${links.length} links from copied content for ${url}`);
+          
+          // Queue new URLs from copied content
+          for (const link of links) {
+            if (!this.visitedUrls.has(link)) {
+              this.urlQueue.push({ url: link, depth: depth + 1 });
+            }
+          }
+          
+          await this.updateJobProgress(jobId); // Update progress
+          await this.applyDelay(crawlOptions); // Apply delay even after copying
+          continue; // Skip fetching and processing this URL
+        }
+
         // Check robots.txt rules if enabled
         if (crawlOptions.respectRobotsTxt && this.robotsTxt && !this.isAllowedByRobotsTxt(url)) {
           logger.info(`Skipping ${url} (disallowed by robots.txt)`);
@@ -155,7 +180,7 @@ export class CrawlerService {
             url: result.url,
             title: result.title,
             content: result.content,
-            metadata: result.metadata,
+            metadata: result.metadata as Prisma.InputJsonValue,
             crawlDate: new Date(),
             level: result.level,
             jobId: jobId,
@@ -464,27 +489,8 @@ export class CrawlerService {
     const mainContent = $('main, article, .content, .documentation, #content').first();
     const content = mainContent.length ? mainContent.html() || '' : $('body').html() || '';
 
-    // Extract links
-    const links = new Set<string>();
-    
-    // Process regular links
-    $('a').each((_: number, element: any) => {
-      const href = $(element).attr('href');
-      if (href) {
-        try {
-          const absoluteUrl = new URL(href, url).toString();
-          // Only include links from the same domain
-          if (absoluteUrl.startsWith(options.baseUrl)) {
-            links.add(absoluteUrl);
-          }
-        } catch (error) {
-          // Invalid URL - ignore
-        }
-      }
-    });
-    
-    // Handle pagination links specifically
-    this.extractPaginationLinks($, url, options.baseUrl, links);
+    // Extract links using the new helper method
+    const extractedLinks = this.extractLinksFromHtml(response.data, options.baseUrl, url);
 
     // Extract metadata
     // This is a basic implementation - you might need to adjust based on the site structure
@@ -501,7 +507,7 @@ export class CrawlerService {
       content,
       metadata,
       level: depth,
-      links: Array.from(links),
+      links: extractedLinks,
     };
   }
 
@@ -542,5 +548,91 @@ export class CrawlerService {
         }
       }
     });
+  }
+
+  /**
+   * NEW METHOD: Check for a recent document in the DB and copy its data
+   * if found, creating a new document record linked to the current job.
+   */
+  private async findAndCopyRecentDocument(url: string, depth: number, jobId: string): Promise<Prisma.DocumentGetPayload<{}> | null> {
+    const fourWeeksAgo = new Date();
+    fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+
+    try {
+      const existingDocument = await this.prisma.document.findFirst({
+        where: {
+          url: url,
+          crawlDate: {
+            gte: fourWeeksAgo // Check if crawlDate is within the last 4 weeks
+          }
+        },
+        orderBy: {
+          crawlDate: 'desc' // Get the most recent one if multiple exist
+        }
+      });
+
+      if (existingDocument) {
+        logger.debug(`Found recent document for ${url} (ID: ${existingDocument.id}, Crawled: ${existingDocument.crawlDate.toISOString()})`);
+
+        // Create a new document record, copying data from the existing one
+        const newDocumentData: Prisma.DocumentCreateInput = {
+          url: existingDocument.url,
+          title: existingDocument.title,
+          content: existingDocument.content,
+          metadata: existingDocument.metadata ?? ({} as Prisma.InputJsonValue),
+          crawlDate: new Date(), // Set crawlDate to now for the new record
+          level: depth, // Use current depth
+          job: { connect: { id: jobId } }, // Link to the current job
+          // We don't copy parentDocumentId or childDocuments relations here
+          // Processing step will handle content/chunks/embeddings for this new doc
+        };
+
+        const newDocument = await this.documentService.createDocument(newDocumentData);
+        logger.info(`Created new document ${newDocument.id} by copying data from ${existingDocument.id}`);
+        return newDocument;
+      } else {
+        logger.debug(`No recent existing document found for ${url}`);
+        return null;
+      }
+    } catch (error) {
+      logger.error(`Error checking for existing document for ${url}:`, error);
+      return null; // Proceed with normal crawl if DB check fails
+    }
+  }
+
+  /**
+   * NEW METHOD: Extracts links from HTML content using Cheerio.
+   * Duplicates link extraction logic from crawlPage.
+   */
+  private extractLinksFromHtml(htmlContent: string, baseUrl: string, currentUrl: string): string[] {
+    const links = new Set<string>();
+    try {
+      const $ = cheerio.load(htmlContent);
+      
+      // Process regular links
+      $('a').each((_: number, element: any) => {
+        const href = $(element).attr('href');
+        if (href) {
+          try {
+            const absoluteUrl = new URL(href, currentUrl).toString();
+            // Only include links from the same domain
+            if (absoluteUrl.startsWith(baseUrl)) {
+              links.add(absoluteUrl);
+            }
+          } catch (error) {
+            // Invalid URL - ignore
+          }
+        }
+      });
+      
+      // Handle pagination links specifically
+      this.extractPaginationLinks($, currentUrl, baseUrl, links);
+
+    } catch (error) {
+      logger.warn(`Error parsing HTML content for link extraction from ${currentUrl}:`, error);
+      // Return empty array if parsing fails
+    }
+    
+    return Array.from(links);
   }
 }

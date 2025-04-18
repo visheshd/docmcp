@@ -11,12 +11,12 @@ import { z } from "zod";
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 // Import MCP tools
-import { sampleToolSchema, sampleToolHandler } from './services/mcp-tools/sample.tool.js';
-import { getJobStatusSchema, getJobStatusHandler } from './services/mcp-tools/get-job-status.tool.js';
-import { addDocumentationSchema, addDocumentationHandler } from './services/mcp-tools/add-documentation.tool.js';
-import { listDocumentationSchema, listDocumentationHandler } from './services/mcp-tools/list-documentation.tool.js';
-import { queryDocumentationSchema, queryDocumentationHandler } from './services/mcp-tools/query-documentation.tool.js';
-import { retryJobSchema, retryJobHandler } from './services/mcp-tools/retry-job.tool.js';
+import { sampleToolSchema, sampleToolHandler } from './services/mcp-tools/sample.tool';
+import { getJobStatusSchema, getJobStatusHandler } from './services/mcp-tools/get-job-status.tool';
+import { addDocumentationSchema, addDocumentationHandler } from './services/mcp-tools/add-documentation.tool';
+import { listDocumentationSchema, listDocumentationHandler } from './services/mcp-tools/list-documentation.tool';
+import { queryDocumentationSchema, queryDocumentationHandler } from './services/mcp-tools/query-documentation.tool';
+import { retryJobSchema, retryJobHandler } from './services/mcp-tools/retry-job.tool';
 
 // Create an MCP server
 const server = new McpServer({
