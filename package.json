@@ -13,7 +13,8 @@
     "test": "prisma generate && jest --runInBand",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:ci": "jest --ci --coverage --maxWorkers=2"
+    "test:ci": "jest --ci --coverage --maxWorkers=2",
+    "add-docs": "node dist/scripts/add-docs.js"
   },
   "keywords": [
     "mcp",
@@ -58,6 +59,7 @@
     "turndown": "^7.2.0",
     "typeorm": "^0.3.22",
     "winston": "^3.17.0",
+    "yargs": "^17.7.2",
     "zod": "^3.24.3"
   },
   "devDependencies": {
@@ -72,6 +74,7 @@
     "@types/pg": "^8.11.13",
     "@types/supertest": "^6.0.3",
     "@types/turndown": "^5.0.5",
+    "@types/yargs": "^17.0.33",
     "@typescript-eslint/eslint-plugin": "^8.30.1",
     "@typescript-eslint/parser": "^8.30.1",
     "dotenv": "^16.5.0",
