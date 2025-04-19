@@ -2,45 +2,45 @@
 
 ## Phase 1: Setup & Interfaces (Priority: High)
 
-- [ ] Create basic directory structure according to spec
-- [ ] Define common types and enums in `interfaces/types.ts`
-- [ ] Implement `ICrawler` interface
-- [ ] Implement `IContentExtractor` interface 
-- [ ] Implement `IPageDetector` interface
-- [ ] Implement `ILinkExtractor` interface
-- [ ] Implement `IRateLimiter` interface
-- [ ] Implement `IJobManager` interface
-- [ ] Implement `IDocumentProcessor` interface
-- [ ] Implement `IRobotsTxtService` interface
-- [ ] Implement `IUrlQueue` interface
-- [ ] Set up dependency injection container/pattern
-- [ ] Create base configuration types
+- [x] Create basic directory structure according to spec
+- [x] Define common types and enums in `interfaces/types.ts`
+- [x] Implement `ICrawler` interface
+- [x] Implement `IContentExtractor` interface 
+- [x] Implement `IPageDetector` interface
+- [x] Implement `ILinkExtractor` interface
+- [x] Implement `IRateLimiter` interface
+- [x] Implement `IJobManager` interface
+- [x] Implement `IDocumentProcessor` interface
+- [x] Implement `IRobotsTxtService` interface
+- [x] Implement `IUrlQueue` interface
+- [x] Set up dependency injection container/pattern
+- [x] Create base configuration types
 
 ## Phase 2: Core Utilities (Priority: High)
 
-- [ ] Implement URL utilities
-  - [ ] URL normalization
-  - [ ] Domain extraction
-  - [ ] URL validation
-- [ ] Implement HTML utilities
-  - [ ] Common parsing helpers
-  - [ ] Content extraction helpers
-- [ ] Implement delay utilities
-  - [ ] Configurable delays
-  - [ ] Exponential backoff
-- [ ] Implement logging utilities
-  - [ ] Crawler-specific logging format
-  - [ ] Log level configuration
+- [x] Implement URL utilities
+  - [x] URL normalization
+  - [x] Domain extraction
+  - [x] URL validation
+- [x] Implement HTML utilities
+  - [x] Common parsing helpers
+  - [x] Content extraction helpers
+- [x] Implement delay utilities
+  - [x] Configurable delays
+  - [x] Exponential backoff
+- [x] Implement logging utilities
+  - [x] Crawler-specific logging format
+  - [x] Log level configuration
 
 ## Phase 3: Basic Implementations (Priority: High)
 
-- [ ] Implement `InMemoryUrlQueue`
-- [ ] Implement `DefaultLinkExtractor`
-- [ ] Implement `RobotsTxtService`
-- [ ] Implement `PrismaJobManager`
-- [ ] Implement `DocumentProcessor`
-- [ ] Implement `TokenBucketRateLimiter`
-- [ ] Create basic `BaseCrawler` abstract class
+- [x] Implement `InMemoryUrlQueue`
+- [x] Implement `DefaultLinkExtractor`
+- [x] Implement `RobotsTxtService`
+- [x] Implement `PrismaJobManager`
+- [x] Implement `DocumentProcessor`
+- [x] Implement `TokenBucketRateLimiter`
+- [x] Create basic `BaseCrawler` abstract class
 
 ## Phase 4: SPA Detection & Content Extraction (Priority: Medium)
 
