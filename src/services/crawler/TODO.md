@@ -45,10 +45,10 @@
 ## Phase 4: SPA Detection & Content Extraction (Priority: Medium)
 
 - [ ] Add Puppeteer as dependency (with lazy loading)
-- [ ] Implement `CheerioExtractor`
-  - [ ] HTML parsing
-  - [ ] Content extraction
-  - [ ] Metadata extraction
+- [x] Implement `CheerioExtractor`
+  - [x] HTML parsing
+  - [x] Content extraction
+  - [x] Metadata extraction
 - [ ] Implement `PuppeteerExtractor`
   - [ ] Browser initialization
   - [ ] Page rendering
