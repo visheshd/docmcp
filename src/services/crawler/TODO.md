@@ -44,16 +44,16 @@
 
 ## Phase 4: SPA Detection & Content Extraction (Priority: Medium)
 
-- [ ] Add Puppeteer as dependency (with lazy loading)
+- [x] Add Puppeteer as dependency (with lazy loading)
 - [x] Implement `CheerioExtractor`
   - [x] HTML parsing
   - [x] Content extraction
   - [x] Metadata extraction
-- [ ] Implement `PuppeteerExtractor`
-  - [ ] Browser initialization
-  - [ ] Page rendering
-  - [ ] Content extraction after JS execution
-  - [ ] Resource cleanup
+- [x] Implement `PuppeteerExtractor`
+  - [x] Browser initialization
+  - [x] Page rendering
+  - [x] Content extraction after JS execution
+  - [x] Resource cleanup
 - [ ] Implement `SPADetector`
   - [ ] Static signature detection
   - [ ] Dynamic behavior analysis
