@@ -54,11 +54,11 @@
   - [x] Page rendering
   - [x] Content extraction after JS execution
   - [x] Resource cleanup
-- [ ] Implement `SPADetector`
-  - [ ] Static signature detection
-  - [ ] Dynamic behavior analysis
-  - [ ] Caching mechanism
-  - [ ] Score-based detection algorithm
+- [x] Implement `SPADetector`
+  - [x] Static signature detection
+  - [x] Dynamic behavior analysis
+  - [x] Caching mechanism
+  - [x] Score-based detection algorithm
 
 ## Phase 5: Crawler Strategy & Factory (Priority: Medium)
 
