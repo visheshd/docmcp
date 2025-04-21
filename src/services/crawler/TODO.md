@@ -76,21 +76,42 @@
 
 ## Phase 6: Testing (Priority: High)
 
-- [ ] Write unit tests for all interfaces and implementations
-  - [ ] URL queue tests
-  - [ ] Link extractor tests
-  - [ ] RobotsTxt service tests
-  - [ ] Job manager tests
-  - [ ] Rate limiter tests
+- [x] Write unit tests for all interfaces and implementations
+  - [x] URL queue tests (InMemoryUrlQueue.test.ts)
+  - [x] Link extractor tests (DefaultLinkExtractor.test.ts)
+  - [x] RobotsTxt service tests (RobotsTxtService.test.ts)
+  - [x] Job manager tests (PrismaJobManager.test.ts)
+  - [x] Rate limiter tests (TokenBucketRateLimiter.test.ts)
+  - [x] Content extractor tests
+    - [x] CheerioExtractor (CheerioExtractor.test.ts)
+    - [ ] PuppeteerExtractor
+  - [x] Document processor tests (DocumentProcessor.test.ts)
   - [x] SPA detection tests
   - [x] Crawling strategy factory tests
-- [ ] Write integration tests
-  - [ ] Full crawl cycle tests
-  - [ ] Error handling tests
-- [ ] Set up mock servers for testing
-  - [ ] Static pages mock
-  - [ ] SPA mock
-  - [ ] Error condition mocks
+- [x] Write integration tests
+  - [x] Full crawl cycle tests
+  - [x] Error handling tests
+  - [x] Respect robots.txt tests
+  - [x] Pagination handling tests
+- [x] Set up mock servers for testing
+  - [x] Static pages mock (using nock)
+  - [ ] Implement `ErrorConditionMocks` Utility
+    - [ ] Create `src/services/crawler/test-utils/mocks/ErrorConditionMocks.ts`.
+    - [ ] Implement logic using `nock` to simulate various errors.
+    - [ ] Include `setup()` and `cleanup()` methods.
+    - [ ] Update `MockExamples.ts` to accurately reflect usage.
+  - [ ] Integrate `SPAMock` into Tests
+    - [ ] Refactor `src/__tests__/services/crawler.service.test.ts` to use `SPAMock`.
+    - [ ] Ensure non-SPA tests use appropriate mocking.
+  - [ ] Integrate `ErrorConditionMocks` into Tests
+    - [ ] Refactor error handling tests in `crawler.service.test.ts`.
+    - [ ] Add new integration tests for specific error types.
+  - [ ] Implement `PuppeteerExtractor` Tests
+    - [ ] Create `src/services/crawler/implementations/__tests__/PuppeteerExtractor.test.ts`.
+    - [ ] Use `SPAMock` for realistic test environments.
+    - [ ] Test JS execution, dynamic content, and cleanup.
+  - [ ] Update `MockExamples.ts`
+    - [ ] Ensure examples are functional and demonstrate final mock implementations.
 
 ## Phase 7: Performance Optimization (Priority: Medium)
 
@@ -108,7 +129,6 @@
 ## Phase 8: Documentation & Examples (Priority: Low)
 
 - [ ] Create API documentation
-- [ ] Add JSDoc comments to all public methods
 - [ ] Create usage examples
   - [ ] Basic crawling example
   - [ ] SPA crawling example

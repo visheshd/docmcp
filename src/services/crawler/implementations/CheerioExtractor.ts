@@ -224,10 +224,10 @@ export class CheerioExtractor implements IContentExtractor {
   private extractLinks($: any, baseUrl: string): string[] {
     const links = new Set<string>();
     
-    // Extract regular links
+    // Extract regular links but not javascript:void(0)
     $('a[href]').each((_: number, element: any) => {
       const href = $(element).attr('href');
-      if (href) {
+      if (href && href !== 'javascript:void(0)') {
         try {
           const absoluteUrl = UrlUtils.resolveUrl(href, baseUrl);
           if (UrlUtils.isValid(absoluteUrl) && !this.isExcludedUrl(absoluteUrl)) {
