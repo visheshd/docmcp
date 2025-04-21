@@ -11,12 +11,7 @@ import { z } from "zod";
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 // Import MCP tools
-import { sampleToolSchema, sampleToolHandler } from './services/mcp-tools/sample.tool';
-import { getJobStatusSchema, getJobStatusHandler } from './services/mcp-tools/get-job-status.tool';
-import { addDocumentationSchema, addDocumentationHandler } from './services/mcp-tools/add-documentation.tool';
-import { listDocumentationSchema, listDocumentationHandler } from './services/mcp-tools/list-documentation.tool';
 import { queryDocumentationSchema, queryDocumentationHandler } from './services/mcp-tools/query-documentation.tool';
-import { retryJobSchema, retryJobHandler } from './services/mcp-tools/retry-job.tool';
 
 // Create an MCP server
 const server = new McpServer({
@@ -25,37 +20,6 @@ const server = new McpServer({
 }, { capabilities: { logging: {} } });
 
 // Register MCP tools from the services/mcp-tools directory
-// Sample tool
-server.tool(
-  "sample",
-  "Sample echo tool for demonstration purposes",
-  sampleToolSchema,
-  sampleToolHandler
-);
-
-// Get job status tool
-server.tool(
-  "get-job-status",
-  "Check the status and progress of a job in the system",
-  getJobStatusSchema,
-  getJobStatusHandler
-);
-
-// Add documentation tool
-server.tool(
-  "add-documentation",
-  "Add documentation to the knowledge base",
-  addDocumentationSchema,
-  addDocumentationHandler
-);
-
-// List documentation tool
-server.tool(
-  "list-documentation",
-  "List available documentation in the knowledge base",
-  listDocumentationSchema,
-  listDocumentationHandler
-);
 
 // Query documentation tool
 server.tool(
@@ -63,14 +27,6 @@ server.tool(
   "Query the knowledge base for relevant documentation",
   queryDocumentationSchema,
   queryDocumentationHandler
-);
-
-// Retry job tool
-server.tool(
-  "retry-job",
-  "Retry a failed job by creating a new job with the same parameters",
-  retryJobSchema,
-  retryJobHandler
 );
 
 // Set up connection close handler

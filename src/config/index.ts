@@ -26,8 +26,16 @@ const config = {
     rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 900000, // 15 minutes
     rateLimitMaxRequests: Number(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
   },
+  embedding: {
+    provider: process.env.EMBEDDING_PROVIDER || 'bedrock',
+    dimensions: Number(process.env.EMBEDDING_DIMENSIONS) || 1536,
+  },
+  aws: {
+    region: process.env.AWS_REGION || 'us-east-1',
+    embeddingDimensions: Number(process.env.AWS_EMBEDDING_DIMENSIONS) || 1536,
+  },
   ollama: {
-    apiUrl: process.env.OLLAMA_API_URL || 'http://localhost:11434/api/embeddings',
+    apiUrl: process.env.OLLAMA_API_URL || 'http://localhost:11434/api/embed',
     embedModel: process.env.OLLAMA_EMBED_MODEL || 'granite-embedding:30m',
   },
   // Add chunking configuration

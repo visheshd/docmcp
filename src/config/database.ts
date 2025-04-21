@@ -32,11 +32,6 @@ export function getPrismaClient() {
     
     // Add logging middleware for non-test environments
     if (process.env.NODE_ENV !== 'test') {
-      (prisma as any).$on('query' as any, (e: Prisma.QueryEvent) => {
-        logger.debug('Query: ' + e.query);
-        logger.debug('Params: ' + e.params);
-        logger.debug('Duration: ' + e.duration + 'ms');
-      });
 
       (prisma as any).$on('error' as any, (e: Prisma.LogEvent) => {
         logger.error('Database error: ' + e.message);

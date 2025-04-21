@@ -225,9 +225,10 @@ export class CheerioExtractor implements IContentExtractor {
     const links = new Set<string>();
     
     // Extract regular links but not javascript:void(0)
+    // or URL with # or mailto: or has the same baseUrl with a # followed by anything
     $('a[href]').each((_: number, element: any) => {
       const href = $(element).attr('href');
-      if (href && href !== 'javascript:void(0)') {
+      if (href && href !== 'javascript:void(0)' && !href.startsWith('#') && !href.startsWith('mailto:') && !href.startsWith(baseUrl + '#')) {
         try {
           const absoluteUrl = UrlUtils.resolveUrl(href, baseUrl);
           if (UrlUtils.isValid(absoluteUrl) && !this.isExcludedUrl(absoluteUrl)) {

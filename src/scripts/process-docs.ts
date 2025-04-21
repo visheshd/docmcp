@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Add Documentation CLI Script
+ * Process Documents CLI Script
  * 
- * This script provides a command-line interface for adding documentation
- * to the DocMCP system. It's an alternative to using the MCP tool and allows
- * direct initiation of documentation crawling and processing from the terminal.
+ * This script provides a command-line interface for processing documents
+ * that have been crawled but not yet processed. It's particularly useful if
+ * you want to run the processing step separately from the crawling step.
  * 
  * @example
  * ```
- * npm run add-docs -- --url https://reactjs.org/docs --max-depth 3 --tags react,frontend --wait
+ * npm run process-docs -- --job-id 550e8400-e29b-41d4-a716-446655440000 --wait
  * ```
  */
 
@@ -17,24 +17,18 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 import yargs from 'yargs';
-import { URL } from 'url';
 import logger from '../utils/logger';
 import { JobService } from '../services/job.service';
-import { JobStatus, JobType } from '../generated/prisma';
+import { DocumentService } from '../services/document.service';
+import { DocumentProcessorService } from '../services/document-processor.service';
+import { JobStatus } from '../generated/prisma';
 import { getPrismaClient } from '../config/database';
-import { startCrawlingProcess } from '../services/mcp-tools/add-documentation.tool';
 
 // Define interface for the CLI arguments
 interface CliArgs {
-  url: string;
-  'max-depth': number;
-  name?: string;
-  tags?: string[];
-  'rate-limit': number;
-  'respect-robots-txt': boolean;
+  'job-id': string;
   wait: boolean;
   verbose: boolean;
-  check: boolean;
   [key: string]: unknown;
 }
 
@@ -81,7 +75,7 @@ async function displayJobProgress(jobId: string, prisma: any): Promise<void> {
           
           // Add status indicators
           if (job.stats) {
-            process.stdout.write(`| Pages: ${job.stats.pagesProcessed || 0} processed, ${job.stats.pagesSkipped || 0} skipped `);
+            process.stdout.write(`| Docs: ${job.stats.pagesProcessed || 0} processed, ${job.stats.totalChunks || 0} chunks `);
           }
           
           // Add time information if available
@@ -117,43 +111,110 @@ async function displayJobProgress(jobId: string, prisma: any): Promise<void> {
 }
 
 /**
- * Main function to parse arguments and execute the documentation addition process
+ * Process all documents for a specific job
+ */
+async function processDocumentsForJob(jobId: string, prisma: any): Promise<void> {
+  const jobService = new JobService(prisma);
+  const documentService = new DocumentService(prisma);
+  const documentProcessorService = new DocumentProcessorService(prisma);
+  
+  // Get job details
+  const job = await jobService.findJobById(jobId);
+  if (!job) {
+    throw new Error(`Job with ID ${jobId} not found`);
+  }
+  
+  // Update job status to processing stage
+  await jobService.updateJobProgress(jobId, 'running', 0.5);
+  await jobService.updateJobMetadata(jobId, { stage: 'processing' });
+  logger.info(`Starting document processing for job ${jobId}`);
+  
+  // Get all documents created by this specific job
+  const documents = await prisma.document.findMany({
+    where: {
+      jobId: jobId
+    }
+  });
+  
+  logger.info(`Found ${documents.length} documents to process for job ${jobId}`);
+  
+  // Process each document (convert HTML to markdown, chunk, create embeddings)
+  const totalDocs = documents.length;
+  let processedDocs = 0;
+  
+  for (const document of documents) {
+    try {
+      logger.info(`Processing document ${document.id} (${document.title}) for job ${jobId}`);
+      
+      // Process the document HTML and generate embeddings
+      await documentProcessorService.processDocument(document.id, document.content, document.metadata);
+      
+      // Update job progress
+      processedDocs++;
+      const progress = 0.5 + (0.5 * (processedDocs / totalDocs));
+      await jobService.updateJobProgress(jobId, 'running', progress);
+      
+      // Update job stats
+      const currentStats = (await jobService.findJobById(jobId))?.stats as Record<string, number>;
+      await jobService.updateJobStats(jobId, {
+        ...currentStats,
+        pagesProcessed: processedDocs,
+        pagesSkipped: 0,
+        totalChunks: processedDocs, // Will be refined later with actual chunk count
+      });
+      
+      logger.info(`Successfully processed document ${document.id} for job ${jobId}`);
+    } catch (error) {
+      logger.error(`Error processing document ${document.id} for job ${jobId}:`, error);
+      
+      // Update document to mark it as having processing errors
+      await documentService.updateDocument(document.id, {
+        metadata: {
+          ...document.metadata as Record<string, any>,
+          processingError: error instanceof Error ? error.message : 'Unknown error during processing',
+        },
+      });
+      
+      // Continue with other documents despite the error
+    }
+  }
+  
+  // Get the actual number of chunks created by this job
+  const stats = await prisma.$queryRaw<[{ count: BigInt }]>`
+    SELECT COUNT(*) as count FROM chunks c
+    INNER JOIN documents d ON d.id = c.document_id
+    WHERE d.job_id = ${jobId}
+  `;
+  
+  // Convert BigInt to Number for stats
+  const chunkCount = stats[0]?.count ? Number(stats[0].count) : processedDocs;
+  
+  // Mark job as completed
+  await jobService.updateJobProgress(jobId, 'completed', 1.0);
+  await jobService.updateJobStats(jobId, {
+    pagesProcessed: processedDocs,
+    pagesSkipped: totalDocs - processedDocs,
+    totalChunks: Number(chunkCount),
+  });
+  
+  logger.info(`Document processing and embedding generation completed for job ${jobId}`);
+  logger.info(`Job statistics: ${processedDocs} documents processed, ${chunkCount} chunks created`);
+}
+
+/**
+ * Main function to parse arguments and execute the document processing
  */
 async function main() {
-  // Filter out the '--' argument that npm adds when running as 'npm run add-docs -- --args'
+  // Filter out the '--' argument that npm adds when running as 'npm run process-docs -- --args'
   const filteredArgs = process.argv.filter(arg => arg !== '--');
   
   // Parse command line arguments using yargs and the filtered arguments
   const argv = yargs(filteredArgs)
-    .usage('Usage: $0 --url <url> [options]')
-    .option('url', {
+    .usage('Usage: $0 --job-id <jobId> [options]')
+    .option('job-id', {
       type: 'string',
       demandOption: true,
-      describe: 'The URL of the documentation site to crawl and process'
-    })
-    .option('max-depth', {
-      type: 'number',
-      default: 3,
-      describe: 'Maximum crawl depth'
-    })
-    .option('name', {
-      type: 'string',
-      describe: 'Friendly name for the source (defaults to hostname)'
-    })
-    .option('tags', {
-      type: 'string',
-      describe: 'Comma-separated tags for categorization',
-      coerce: (arg: string) => arg.split(',').map(tag => tag.trim())
-    })
-    .option('rate-limit', {
-      type: 'number',
-      default: 1000,
-      describe: 'Milliseconds between requests'
-    })
-    .option('respect-robots-txt', {
-      type: 'boolean',
-      default: true,
-      describe: 'Whether to respect robots.txt rules'
+      describe: 'The ID of the job to process documents for'
     })
     .option('wait', {
       type: 'boolean',
@@ -166,24 +227,10 @@ async function main() {
       default: false,
       describe: 'Enable more detailed logging'
     })
-    .option('check', {
-      type: 'boolean',
-      default: false,
-      describe: 'Validate arguments without connecting to the database'
-    })
-    .check((argv) => {
-      // Validate URL format
-      try {
-        new URL(argv.url as string);
-        return true;
-      } catch (error) {
-        throw new Error('Invalid URL format. Please provide a valid URL with protocol (e.g., https://example.com).');
-      }
-    })
     .epilogue('For more information, see the documentation in the README.md file.')
     .help()
     .alias('help', 'h')
-    .parseSync() as CliArgs; // Type assertion here
+    .parseSync() as CliArgs;
 
   try {
     // Enable verbose logging if the flag is set
@@ -193,27 +240,7 @@ async function main() {
       logger.debug('Parsed CLI arguments:', argv);
     }
     
-    logger.info(`Starting documentation addition process for URL: ${argv.url}`);
-    
-    // Extract hostname and tags for displaying in check mode too
-    const urlObj = new URL(argv.url);
-    const name = argv['name'] || urlObj.hostname;
-    const tags = argv.tags || [urlObj.hostname];
-    
-    // If in check mode, just validate and exit
-    if (argv.check) {
-      logger.info('Check mode: Validating arguments without database connection');
-      console.log('✅ Arguments validated successfully');
-      console.log('Configuration summary:');
-      console.log(`  URL: ${argv.url}`);
-      console.log(`  Max Depth: ${argv['max-depth']}`);
-      console.log(`  Name: ${name}`);
-      console.log(`  Tags: ${tags.join(', ')}`);
-      console.log(`  Rate Limit: ${argv['rate-limit']}ms`);
-      console.log(`  Respect robots.txt: ${argv['respect-robots-txt']}`);
-      console.log(`  Wait for completion: ${argv.wait}`);
-      process.exit(0);
-    }
+    logger.info(`Starting document processing for job: ${argv['job-id']}`);
     
     try {
       // Connect to the database
@@ -222,79 +249,42 @@ async function main() {
       // Initialize the job service
       const jobService = new JobService(prisma);
       
-      // Create job record in the database
-      logger.info('Creating job record in database...');
+      // Check if job exists
+      const job = await jobService.findJobById(argv['job-id']);
+      if (!job) {
+        console.error(`Error: Job ${argv['job-id']} not found`);
+        process.exit(1);
+      }
       
-      // Create job with appropriate parameters
-      const job = await jobService.createJob({
-        url: argv.url,
-        status: JobStatus.pending,
-        type: JobType.crawl,
-        startDate: new Date(),
-        progress: 0,
-        endDate: null,
-        error: null,
-        stats: {
-          pagesProcessed: 0,
-          pagesSkipped: 0,
-          totalChunks: 0
-        },
-        metadata: {
-          sourceUrl: argv.url,
-          sourceName: name,
-          sourceTags: tags,
-          crawlMaxDepth: argv['max-depth'],
-          crawlRateLimit: argv['rate-limit'],
-          crawlRespectRobotsTxt: argv['respect-robots-txt'],
-        }
-      });
+      console.log(`Found job ${job.id} (${job.status})`);
       
-      logger.info(`Job created successfully with ID: ${job.id}`);
-      console.log(`Job ID: ${job.id}`);
-      
-      // Implement core processing logic (Task 11.3)
       if (!argv.wait) {
-        // Start the crawling process in the background
-        startCrawlingProcess(job.id, {
-          url: argv.url,
-          maxDepth: argv['max-depth'],
-          name: name,
-          tags: tags,
-          rateLimit: argv['rate-limit'],
-          respectRobotsTxt: argv['respect-robots-txt'],
-        }).catch(error => {
+        // Start the processing in the background
+        processDocumentsForJob(job.id, prisma).catch(error => {
           logger.error(`Unhandled error in background job ${job.id}:`, error);
         });
         
-        console.log(`Documentation processing started in the background.`);
+        console.log(`Document processing started in the background.`);
         console.log(`Use 'mcp_docmcp_local_stdio_get_job_status' with jobId=${job.id} to check progress.`);
         
         // Exit after starting the process
         process.exit(0);
       } else {
-        // Implement wait functionality (Task 11.4)
+        // Implement wait functionality
         console.log(`Waiting for job ${job.id} to complete...`);
         
         // When --wait is specified, start displaying progress
         console.log(`Real-time progress display enabled. Press Ctrl+C to stop (job will continue in background).`);
         
         // Start the process
-        const crawlPromise = startCrawlingProcess(job.id, {
-          url: argv.url,
-          maxDepth: argv['max-depth'],
-          name: name,
-          tags: tags,
-          rateLimit: argv['rate-limit'],
-          respectRobotsTxt: argv['respect-robots-txt'],
-          _bypassAsync: true // Run synchronously
-        });
+        const processPromise = processDocumentsForJob(job.id, prisma);
         
         // Display progress while job is running
         const progressDisplayPromise = displayJobProgress(job.id, prisma);
         
-        // Wait for both the crawl process and progress display to finish
+        // Wait for both the process and progress display to finish
         try {
-          await Promise.all([crawlPromise, progressDisplayPromise]);
+          await Promise.all([processPromise, progressDisplayPromise]);
           
           // Get final job details
           const finalJob = await jobService.findJobById(job.id);
@@ -310,9 +300,8 @@ async function main() {
           if (finalJob.status === 'completed') {
             const jobStats = finalJob.stats as Record<string, any>;
             if (jobStats) {
-              console.log(`Processed ${jobStats.pagesProcessed || 0} pages`);
+              console.log(`Processed ${jobStats.pagesProcessed || 0} documents`);
               console.log(`Created ${jobStats.totalChunks || 0} chunks`);
-              console.log(`Skipped ${jobStats.pagesSkipped || 0} pages`);
             }
             console.log(`\nDocumentation is now available in the knowledge base.`);
             process.exit(0);
@@ -356,7 +345,7 @@ async function main() {
     }
     
   } catch (error) {
-    logger.error('Error during documentation addition:', error);
+    logger.error('Error during document processing:', error);
     console.error(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     process.exit(1);
   }
@@ -364,7 +353,7 @@ async function main() {
 
 // Execute the main function
 main().catch(error => {
-  logger.error('Unhandled error in add-docs script:', error);
+  logger.error('Unhandled error in process-docs script:', error);
   console.error(`Fatal error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   process.exit(1);
 }); 

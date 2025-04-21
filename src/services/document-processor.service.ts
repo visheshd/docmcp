@@ -10,6 +10,9 @@ import { DocumentService } from './document.service';
 import axios from 'axios';
 import config from '../config'; // Import the config
 import { URL } from 'url'; // Import URL for robust path joining
+// We'll dynamically import AWS dependencies to avoid errors if not installed
+import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
+import { BedrockEmbeddings } from '@langchain/aws';
 
 // Define the metadata structure
 interface MetadataExtracted {
@@ -49,11 +52,16 @@ export class DocumentProcessorService {
   private markdownIt: MarkdownIt;
   private chunkService: ChunkService;
   private documentService: DocumentService;
+  private bedrockClient?: BedrockRuntimeClient; // Type will be BedrockRuntimeClient when imported
+  private embeddings?: BedrockEmbeddings; // Type will be BedrockEmbeddings when imported
 
   constructor(prismaClient?: PrismaClient, documentService?: DocumentService, chunkService?: ChunkService) {
     this.prisma = prismaClient || getMainPrismaClient();
     this.chunkService = chunkService || new ChunkService(this.prisma);
     this.documentService = documentService || new DocumentService(this.prisma);
+    
+    // Initialize AWS Bedrock client if configured and AWS is enabled
+    this.initializeBedrockClient();
     
     // Initialize Turndown for HTML to Markdown conversion
     this.turndownService = new TurndownService({
@@ -91,23 +99,178 @@ export class DocumentProcessorService {
   }
 
   /**
-   * Create an embedding for a text string using the Ollama API
+   * Initialize AWS Bedrock client if the necessary configuration exists
+   * and the AWS SDK is available
+   */
+  private async initializeBedrockClient(): Promise<void> {
+    // Check if the AWS provider is configured
+    const embedProvider = (config as any).embedding?.provider;
+    const awsConfig = (config as any).aws;
+    
+    if (embedProvider === 'bedrock' && 
+        awsConfig?.region && 
+        awsConfig?.accessKeyId && 
+        awsConfig?.secretAccessKey) {
+      try {
+        
+        this.bedrockClient = new BedrockRuntimeClient({
+          region: awsConfig.region,
+          credentials: {
+            accessKeyId: awsConfig.accessKeyId,
+            secretAccessKey: awsConfig.secretAccessKey
+          }
+        });
+        
+        // Initialize Bedrock embeddings with the chosen model
+        this.embeddings = new BedrockEmbeddings({
+          client: this.bedrockClient,
+          model: awsConfig.embeddingModel || 'amazon.titan-embed-text-v1',
+        });
+
+        
+        logger.info('AWS Bedrock embedding client initialized successfully');
+      } catch (error) {
+        logger.error('Failed to initialize AWS Bedrock client:', error);
+        logger.warn('Make sure you have installed @aws-sdk/client-bedrock-runtime and @langchain/aws packages');
+        // Proceed without Bedrock - will fallback to Ollama
+      }
+    }
+  }
+
+  /**
+   * Create an embedding for a text string using the configured embedding provider
+   * with retry logic to handle transient failures
    */
   async createEmbedding(text: string): Promise<number[]> {
-    try {
-      // Construct the full API endpoint URL
-      const endpoint = new URL('/api/embeddings', config.ollama.apiUrl).toString();
-      logger.debug(`Sending embedding request to: ${endpoint}`);
-      
-      const response = await axios.post(endpoint, {
-        model: config.ollama.embedModel,
-        prompt: text
-      });
-      return response.data.embedding;
-    } catch (error) {
-      logger.error('Error creating embedding:', error);
-      throw error;
+    const maxRetries = 3;
+    let retryDelay = 1000; // 1 second
+
+    // Use AWS Bedrock if configured and initialized
+    const embedProvider = (config as any).embedding?.provider;
+    if (embedProvider === 'bedrock' && this.embeddings) {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          logger.debug(`Sending embedding request to AWS Bedrock, attempt ${attempt}`);
+          
+          // Use LangChain's BedrockEmbeddings to get the embedding
+          const result = await this.embeddings.embedQuery(text);
+          
+          // Verify dimensions match what we expect
+          const awsConfig = (config as any).aws;
+          if (awsConfig?.embeddingDimensions && 
+              result.length !== awsConfig.embeddingDimensions) {
+            logger.warn(`Expected ${awsConfig.embeddingDimensions} dimensions but got ${result.length}`);
+          }
+          
+          return result;
+        } catch (error: any) {
+          logger.warn(`AWS Bedrock embedding request failed (Attempt ${attempt}/${maxRetries})`, {
+            errorMessage: error.message,
+            errorCode: error.code,
+            errorType: error.$metadata?.httpStatusCode,
+            chunkStart: text.substring(0, 50) + '...'
+          });
+
+          if (attempt === maxRetries) {
+            logger.error(`AWS Bedrock embedding request failed after ${maxRetries} attempts.`, { 
+              chunkStart: text.substring(0, 100) + '...',
+              finalErrorMessage: error.message
+            });
+            // Fall through to Ollama fallback instead of throwing an error
+            logger.info('Falling back to Ollama for embedding generation');
+            break;
+          }
+
+          // Exponential backoff for retries
+          const backoffTime = retryDelay * Math.pow(2, attempt - 1);
+          await new Promise(resolve => setTimeout(resolve, backoffTime));
+        }
+      }
+    } 
+    
+    // Fallback to Ollama if Bedrock isn't configured or fails
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Construct the full API endpoint URL
+        const endpoint = new URL(config.ollama.apiUrl).toString();
+        logger.debug(`Sending embedding request to Ollama, attempt ${attempt}: ${endpoint}`);
+        
+        const requestPayload = {
+          model: config.ollama.embedModel,
+          input: text,
+          dimensions: 1536
+        };
+        
+        const response = await axios.post(endpoint, requestPayload);
+        
+        
+        // Prioritize the expected structure from the Ollama API
+        if (response.data && response.data.embeddings && Array.isArray(response.data.embeddings[0])) {
+          // Handle response format: {"embeddings": [[0.1, 0.2, ...]]}
+          return response.data.embeddings[0];
+        } else if (response.data && response.data.embedding) {
+          // Handle response format: {"embedding": [0.1, 0.2, ...]}
+          return response.data.embedding;
+        } else if (response.data && Array.isArray(response.data.embeddings)) {
+          // Handle response format: {"embeddings": [0.1, 0.2, ...]}
+          return response.data.embeddings;
+        }
+        
+        // Fallbacks for other possible API response formats
+        const fallbacks = [
+          response.data?.data,
+          response.data?.vector,
+          Array.isArray(response.data) ? response.data : null
+        ];
+        
+        for (const possibleEmbedding of fallbacks) {
+          if (Array.isArray(possibleEmbedding) && possibleEmbedding.length > 0 
+              && typeof possibleEmbedding[0] === 'number') {
+            return possibleEmbedding;
+          }
+        }
+        
+        // Deep search if all else fails
+        if (response.data && typeof response.data === 'object') {
+          for (const key of Object.keys(response.data)) {
+            const value = response.data[key];
+            if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'number') {
+              logger.debug(`Found embedding array in response.data.${key}`);
+              return value;
+            } else if (Array.isArray(value) && value.length > 0 && Array.isArray(value[0])) {
+              logger.debug(`Found nested embedding array in response.data.${key}[0]`);
+              return value[0];
+            }
+          }
+        }
+        
+        // This indicates a problem with Ollama's response format
+        logger.error(`Invalid response structure from Ollama API: ${JSON.stringify(response.data)}`);
+        throw new Error('Invalid response structure from Ollama API');
+      } catch (error: any) {
+        logger.warn(`Ollama API request failed (Attempt ${attempt}/${maxRetries})`, {
+          errorMessage: error.message,
+          axiosErrorCode: error.code,
+          responseStatus: error.response?.status,
+          responseData: error.response?.data,
+          chunkStart: text.substring(0, 50) + '...'
+        });
+
+        if (attempt === maxRetries) {
+          logger.error(`Ollama API request failed after ${maxRetries} attempts.`, { 
+            chunkStart: text.substring(0, 100) + '...',
+            finalErrorMessage: error.message,
+            finalAxiosErrorCode: error.code,
+            finalResponseStatus: error.response?.status
+          });
+          throw error;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
     }
+    
+    throw new Error('Embedding generation failed after multiple retries.');
   }
 
   /**
@@ -768,60 +931,6 @@ export class DocumentProcessorService {
         return;
       }
 
-      // Configuration for Ollama API - Now sourced from config
-      const ollamaApiUrl = config.ollama.apiUrl;
-      const ollamaModel = config.ollama.embedModel;
-
-      // Embedding function using Ollama API
-      const createEmbedding = async (text: string): Promise<number[]> => {
-        const maxRetries = 3;
-        const retryDelay = 1000; // 1 second
-        const endpoint = new URL('/api/embeddings', config.ollama.apiUrl).toString();
-        logger.debug(`Sending embedding request to: ${endpoint}`);
-
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          try {
-            const response = await axios.post(endpoint, {
-              model: ollamaModel,
-              prompt: text,
-            });
-            
-            if (response.data && response.data.embedding) {
-              return response.data.embedding;
-            } else {
-              // This indicates a problem with Ollama's response format, unlikely to be fixed by retry
-              throw new Error('Invalid response structure from Ollama API');
-            }
-          } catch (error: any) { // Added type annotation for error
-            logger.warn(`Ollama API request failed (Attempt ${attempt}/${maxRetries})`, {
-              // Safely access error properties
-              errorMessage: error.message,
-              axiosErrorCode: error.code, // Common axios error code
-              responseStatus: error.response?.status,
-              responseData: error.response?.data,
-              chunkStart: text.substring(0, 50) + '...'
-            });
-
-            if (attempt === maxRetries) {
-              // If it's the last attempt, rethrow the error to be caught by the batch processing loop
-              logger.error(`Ollama API request failed after ${maxRetries} attempts.`, { 
-                chunkStart: text.substring(0, 100) + '...',
-                finalErrorMessage: error.message,
-                finalAxiosErrorCode: error.code,
-                finalResponseStatus: error.response?.status
-              });
-              throw error; // Rethrow the final error
-            }
-
-            // Wait before retrying
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-          }
-        }
-        // Should not be reached if retries fail, as the error is rethrown
-        // Adding a fallback throw to satisfy TypeScript's need for a return/throw path
-        throw new Error('Embedding generation failed after multiple retries.'); 
-      };
-
       // Process chunks in batches
       const batchSize = 10; // Consider adjusting based on Ollama performance/limits
       const chunksWithEmbeddings = [];
@@ -832,7 +941,7 @@ export class DocumentProcessorService {
         // If Ollama handles concurrent requests well, Promise.all could be used here.
         for (const chunk of batchChunks) {
           try {
-            const embedding = await createEmbedding(chunk.content);
+            const embedding = await this.createEmbedding(chunk.content);
             chunksWithEmbeddings.push({
               ...chunk,
               embedding
@@ -870,4 +979,4 @@ export class DocumentProcessorService {
       throw error; 
     }
   }
-} 
+}

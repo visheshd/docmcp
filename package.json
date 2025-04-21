@@ -14,7 +14,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:ci": "jest --ci --coverage --maxWorkers=2",
-    "add-docs": "node dist/scripts/add-docs.js"
+    "add-docs": "node dist/scripts/add-docs.js",
+    "process-docs": "node dist/scripts/process-docs.js"
   },
   "keywords": [
     "mcp",
@@ -26,6 +27,8 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.787.0",
+    "@langchain/aws": "^0.1.8",
     "@modelcontextprotocol/sdk": "^1.10.0",
     "@nestjs/common": "^11.0.17",
     "@prisma/client": "^6.6.0",

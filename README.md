@@ -200,6 +200,25 @@ curl -X POST http://localhost:1337/mcp \
   -d '{"function": "add_documentation", "parameters": {"url": "https://example.com/docs", "maxDepth": 3}}'
 ```
 
+### Separate Processing Step (Optional)
+
+If you need to separate the crawling and processing steps, you can:
+
+1. First crawl the documentation:
+```bash
+npm run add-docs -- --url https://example.com/docs --max-depth 3
+```
+
+2. Then process the documents separately using the job ID from the previous step:
+```bash
+npm run process-docs -- --job-id 7f6f9574-ad9c-4307-94b3-226c2047144b --wait
+```
+
+This is useful when:
+- You want to verify the crawled content before processing
+- You need to retry only the processing step after a failure
+- You're customizing the processing pipeline
+
 ## Querying Documentation
 
 Query your documentation using natural language:
