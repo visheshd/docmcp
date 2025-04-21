@@ -62,12 +62,12 @@
 
 ## Phase 5: Crawler Strategy & Factory (Priority: Medium)
 
-- [ ] Implement `CrawlingStrategyFactory`
-  - [ ] Strategy selection logic
-  - [ ] Configuration options
-- [ ] Implement `ServiceFactory`
-  - [ ] Dependency injection
-  - [ ] Service instantiation
+- [x] Implement `CrawlingStrategyFactory`
+  - [x] Strategy selection logic
+  - [x] Configuration options
+- [x] Implement `ServiceFactory`
+  - [x] Dependency injection
+  - [x] Service instantiation
 - [ ] Implement `StandardCrawler`
   - [ ] Main crawling loop
   - [ ] Error handling
@@ -82,10 +82,11 @@
   - [ ] RobotsTxt service tests
   - [ ] Job manager tests
   - [ ] Rate limiter tests
+  - [x] SPA detection tests
+  - [x] Crawling strategy factory tests
 - [ ] Write integration tests
   - [ ] Full crawl cycle tests
   - [ ] Error handling tests
-  - [ ] SPA detection tests
 - [ ] Set up mock servers for testing
   - [ ] Static pages mock
   - [ ] SPA mock
