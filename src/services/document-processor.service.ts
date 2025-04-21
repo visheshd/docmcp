@@ -102,171 +102,104 @@ export class DocumentProcessorService {
    * Initialize AWS Bedrock client if the necessary configuration exists
    * and the AWS SDK is available
    */
-  private async initializeBedrockClient(): Promise<void> {
-    // Check if the AWS provider is configured
-    const embedProvider = (config as any).embedding?.provider;
-    const awsConfig = (config as any).aws;
-    
-    if (embedProvider === 'bedrock' && 
-        awsConfig?.region && 
-        awsConfig?.accessKeyId && 
-        awsConfig?.secretAccessKey) {
-      try {
-        
-        this.bedrockClient = new BedrockRuntimeClient({
-          region: awsConfig.region,
-          credentials: {
-            accessKeyId: awsConfig.accessKeyId,
-            secretAccessKey: awsConfig.secretAccessKey
-          }
-        });
-        
-        // Initialize Bedrock embeddings with the chosen model
-        this.embeddings = new BedrockEmbeddings({
-          client: this.bedrockClient,
-          model: awsConfig.embeddingModel || 'amazon.titan-embed-text-v1',
-        });
-
-        
-        logger.info('AWS Bedrock embedding client initialized successfully');
-      } catch (error) {
-        logger.error('Failed to initialize AWS Bedrock client:', error);
-        logger.warn('Make sure you have installed @aws-sdk/client-bedrock-runtime and @langchain/aws packages');
-        // Proceed without Bedrock - will fallback to Ollama
+  private initializeBedrockClient(): void {
+    try {
+      // The AWS config is already in the config file
+      const awsConfig = config.aws;
+      const embedProvider = config.embedding?.provider;
+      
+      // Add debug log to show the current AWS configuration
+      logger.debug(`AWS Bedrock configuration: ${JSON.stringify({
+        provider: embedProvider,
+        region: awsConfig?.region,
+        accessKeyIdPresent: !!awsConfig?.accessKeyId,
+        secretAccessKeyPresent: !!awsConfig?.secretAccessKey,
+        accessKeyIdIsDefault: awsConfig?.accessKeyId === 'your-access-key-id',
+        secretAccessKeyIsDefault: awsConfig?.secretAccessKey === 'your-secret-access-key',
+        embeddingDimensions: config.aws?.embeddingDimensions,
+      })}`);
+      
+      if (embedProvider !== 'bedrock' || 
+          !awsConfig || 
+          !awsConfig.accessKeyId || 
+          !awsConfig.secretAccessKey ||
+          awsConfig.accessKeyId === 'your-access-key-id' ||  // Check for default placeholder values
+          awsConfig.secretAccessKey === 'your-secret-access-key') {
+        logger.warn('AWS Bedrock embedding provider is not properly configured. Please check your environment variables.');
+        return;
       }
+      
+      // Import the required libraries
+      const { BedrockRuntimeClient } = require('@aws-sdk/client-bedrock-runtime');
+      const { BedrockEmbeddings } = require('@langchain/aws');
+      
+      // Initialize the Bedrock client
+      this.bedrockClient = new BedrockRuntimeClient({
+        region: awsConfig.region,
+        credentials: {
+          accessKeyId: awsConfig.accessKeyId,
+          secretAccessKey: awsConfig.secretAccessKey
+        }
+      });
+      
+      // Initialize Bedrock embeddings with the chosen model
+      this.embeddings = new BedrockEmbeddings({
+        client: this.bedrockClient,
+        model: 'amazon.titan-embed-text-v1', // Default to this model if not specified
+      });
+      
+      logger.info('AWS Bedrock embedding client initialized successfully');
+    } catch (error) {
+      logger.error('Failed to initialize AWS Bedrock client:', error);
+      logger.warn('Make sure you have installed @aws-sdk/client-bedrock-runtime and @langchain/aws packages');
     }
   }
 
   /**
-   * Create an embedding for a text string using the configured embedding provider
+   * Create an embedding for a text string using AWS Bedrock
    * with retry logic to handle transient failures
    */
   async createEmbedding(text: string): Promise<number[]> {
     const maxRetries = 3;
-    let retryDelay = 1000; // 1 second
+    let retryDelay = 1000; // 1 second base delay
 
-    // Use AWS Bedrock if configured and initialized
-    const embedProvider = (config as any).embedding?.provider;
-    if (embedProvider === 'bedrock' && this.embeddings) {
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          logger.debug(`Sending embedding request to AWS Bedrock, attempt ${attempt}`);
-          
-          // Use LangChain's BedrockEmbeddings to get the embedding
-          const result = await this.embeddings.embedQuery(text);
-          
-          // Verify dimensions match what we expect
-          const awsConfig = (config as any).aws;
-          if (awsConfig?.embeddingDimensions && 
-              result.length !== awsConfig.embeddingDimensions) {
-            logger.warn(`Expected ${awsConfig.embeddingDimensions} dimensions but got ${result.length}`);
-          }
-          
-          return result;
-        } catch (error: any) {
-          logger.warn(`AWS Bedrock embedding request failed (Attempt ${attempt}/${maxRetries})`, {
-            errorMessage: error.message,
-            errorCode: error.code,
-            errorType: error.$metadata?.httpStatusCode,
-            chunkStart: text.substring(0, 50) + '...'
-          });
+    if (!this.embeddings) {
+      throw new Error('AWS Bedrock embedding client not initialized. Check your configuration.');
+    }
 
-          if (attempt === maxRetries) {
-            logger.error(`AWS Bedrock embedding request failed after ${maxRetries} attempts.`, { 
-              chunkStart: text.substring(0, 100) + '...',
-              finalErrorMessage: error.message
-            });
-            // Fall through to Ollama fallback instead of throwing an error
-            logger.info('Falling back to Ollama for embedding generation');
-            break;
-          }
-
-          // Exponential backoff for retries
-          const backoffTime = retryDelay * Math.pow(2, attempt - 1);
-          await new Promise(resolve => setTimeout(resolve, backoffTime));
-        }
-      }
-    } 
-    
-    // Fallback to Ollama if Bedrock isn't configured or fails
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        // Construct the full API endpoint URL
-        const endpoint = new URL(config.ollama.apiUrl).toString();
-        logger.debug(`Sending embedding request to Ollama, attempt ${attempt}: ${endpoint}`);
+        logger.debug(`Sending embedding request to AWS Bedrock, attempt ${attempt}`);
         
-        const requestPayload = {
-          model: config.ollama.embedModel,
-          input: text,
-          dimensions: 1536
-        };
+        // Use LangChain's BedrockEmbeddings to get the embedding
+        const result = await this.embeddings.embedQuery(text);
         
-        const response = await axios.post(endpoint, requestPayload);
-        
-        
-        // Prioritize the expected structure from the Ollama API
-        if (response.data && response.data.embeddings && Array.isArray(response.data.embeddings[0])) {
-          // Handle response format: {"embeddings": [[0.1, 0.2, ...]]}
-          return response.data.embeddings[0];
-        } else if (response.data && response.data.embedding) {
-          // Handle response format: {"embedding": [0.1, 0.2, ...]}
-          return response.data.embedding;
-        } else if (response.data && Array.isArray(response.data.embeddings)) {
-          // Handle response format: {"embeddings": [0.1, 0.2, ...]}
-          return response.data.embeddings;
+        // Verify dimensions match what we expect
+        if (config.aws?.embeddingDimensions && 
+            result.length !== config.aws.embeddingDimensions) {
+          logger.warn(`Expected ${config.aws.embeddingDimensions} dimensions but got ${result.length}`);
         }
         
-        // Fallbacks for other possible API response formats
-        const fallbacks = [
-          response.data?.data,
-          response.data?.vector,
-          Array.isArray(response.data) ? response.data : null
-        ];
-        
-        for (const possibleEmbedding of fallbacks) {
-          if (Array.isArray(possibleEmbedding) && possibleEmbedding.length > 0 
-              && typeof possibleEmbedding[0] === 'number') {
-            return possibleEmbedding;
-          }
-        }
-        
-        // Deep search if all else fails
-        if (response.data && typeof response.data === 'object') {
-          for (const key of Object.keys(response.data)) {
-            const value = response.data[key];
-            if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'number') {
-              logger.debug(`Found embedding array in response.data.${key}`);
-              return value;
-            } else if (Array.isArray(value) && value.length > 0 && Array.isArray(value[0])) {
-              logger.debug(`Found nested embedding array in response.data.${key}[0]`);
-              return value[0];
-            }
-          }
-        }
-        
-        // This indicates a problem with Ollama's response format
-        logger.error(`Invalid response structure from Ollama API: ${JSON.stringify(response.data)}`);
-        throw new Error('Invalid response structure from Ollama API');
+        return result;
       } catch (error: any) {
-        logger.warn(`Ollama API request failed (Attempt ${attempt}/${maxRetries})`, {
+        logger.warn(`AWS Bedrock embedding request failed (Attempt ${attempt}/${maxRetries})`, {
           errorMessage: error.message,
-          axiosErrorCode: error.code,
-          responseStatus: error.response?.status,
-          responseData: error.response?.data,
+          errorCode: error.code,
+          errorType: error.$metadata?.httpStatusCode,
           chunkStart: text.substring(0, 50) + '...'
         });
 
         if (attempt === maxRetries) {
-          logger.error(`Ollama API request failed after ${maxRetries} attempts.`, { 
+          logger.error(`AWS Bedrock embedding request failed after ${maxRetries} attempts.`, { 
             chunkStart: text.substring(0, 100) + '...',
-            finalErrorMessage: error.message,
-            finalAxiosErrorCode: error.code,
-            finalResponseStatus: error.response?.status
+            finalErrorMessage: error.message
           });
           throw error;
         }
 
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        // Exponential backoff for retries
+        const backoffTime = retryDelay * Math.pow(2, attempt - 1);
+        await new Promise(resolve => setTimeout(resolve, backoffTime));
       }
     }
     
@@ -931,29 +864,62 @@ export class DocumentProcessorService {
         return;
       }
 
+      // Check if AWS Bedrock is initialized
+      if (!this.embeddings) {
+        throw new Error('AWS Bedrock embedding client not initialized. Check your configuration.');
+      }
+
       // Process chunks in batches
-      const batchSize = 10; // Consider adjusting based on Ollama performance/limits
+      const batchSize = 5; // Smaller batch size to avoid rate limits
       const chunksWithEmbeddings = [];
+      let successCount = 0;
+      let errorCount = 0;
+
+      logger.info(`Starting embedding generation for ${chunks.length} chunks from document ${documentId}`);
 
       for (let i = 0; i < chunks.length; i += batchSize) {
         const batchChunks = chunks.slice(i, i + batchSize);
-        // Note: Running embeddings sequentially per batch to avoid overwhelming Ollama
-        // If Ollama handles concurrent requests well, Promise.all could be used here.
+        // Process each chunk sequentially to avoid overwhelming the API
         for (const chunk of batchChunks) {
           try {
+            // Add a small delay between requests to avoid rate limiting
+            if (i > 0 || batchChunks.indexOf(chunk) > 0) {
+              await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            
+            logger.debug(`Generating embedding for chunk ${chunksWithEmbeddings.length + 1}/${chunks.length} from document ${documentId}`);
             const embedding = await this.createEmbedding(chunk.content);
+            
             chunksWithEmbeddings.push({
               ...chunk,
               embedding
             });
-          } catch (batchError) {
-            // Log the error for the specific chunk but continue processing the rest of the batch/document
-            logger.error(`Failed to generate embedding for a chunk in document ${documentId}, skipping chunk.`, { chunkContentStart: chunk.content.substring(0, 50) });
-            // Optionally, you could add the chunk without an embedding or mark it somehow
+            
+            successCount++;
+          } catch (error: any) {
+            errorCount++;
+            // Provide detailed error information to help diagnose issues
+            logger.error(`Failed to generate embedding for a chunk in document ${documentId}, skipping chunk.`, { 
+              chunkContentStart: chunk.content.substring(0, 100),
+              chunkContentLength: chunk.content.length,
+              chunkType: chunk.metadata.type,
+              errorMessage: error.message,
+              errorCode: error.code,
+              errorType: error.$metadata?.httpStatusCode
+            });
+            
+            // If too many consecutive errors, consider backing off
+            if (errorCount > 5 && errorCount === i + batchChunks.indexOf(chunk) + 1) {
+              logger.warn(`Encountered ${errorCount} consecutive embedding errors. Adding longer backoff delay.`);
+              await new Promise(resolve => setTimeout(resolve, 2000)); // 2-second backoff
+            }
           }
         }
-        // Optional: Add a small delay between batches if needed
-        // await new Promise(resolve => setTimeout(resolve, 100)); 
+        
+        // Add a small delay between batches to avoid overwhelming the API
+        if (i + batchSize < chunks.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
 
       // Store chunks that successfully received embeddings
@@ -962,21 +928,27 @@ export class DocumentProcessorService {
           chunksWithEmbeddings.map(chunk => ({
             documentId,
             content: chunk.content,
-            embedding: chunk.embedding, // This now comes from Ollama
+            embedding: chunk.embedding,
             metadata: chunk.metadata
           })), 
           documentId
         );
-        logger.info(`Successfully created ${chunksWithEmbeddings.length} chunk embeddings for document ${documentId}`);
+        logger.info(`Successfully created ${chunksWithEmbeddings.length}/${chunks.length} chunk embeddings for document ${documentId}`);
       } else {
         logger.warn(`No chunk embeddings were successfully generated for document ${documentId}`);
       }
 
-    } catch (error) {
-      // Catch errors from the overall process (e.g., database errors during createManyChunks)
-      logger.error(`Error processing chunk embeddings for document ${documentId}:`, error);
-      // Decide if this should rethrow or be handled differently
-      throw error; 
+      // Log embedding statistics
+      logger.info(`Embedding generation complete for document ${documentId}: ${successCount} successful, ${errorCount} failed`);
+
+    } catch (error: any) {
+      // Catch errors from the overall process
+      logger.error(`Error processing chunk embeddings for document ${documentId}:`, {
+        error: error.message,
+        stack: error.stack,
+        chunksCount: chunks.length
+      });
+      throw error;
     }
   }
 }

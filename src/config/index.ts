@@ -1,14 +1,16 @@
 import logger from '../utils/logger';
 
-// Load environment variables only in non-production environments
-if (process.env.NODE_ENV !== 'production') {
-  try {
-    const dotenv = require('dotenv'); // Use require for conditional loading
-    dotenv.config();
-  } catch (error) {
-    logger.warn('dotenv module not found, skipping .env file loading.');
-    // Optional: Handle the error further if needed
+// Load environment variables always
+try {
+  const dotenv = require('dotenv');
+  const result = dotenv.config();
+  if (result.error) {
+    logger.warn(`Error loading .env file: ${result.error.message}`);
+  } else {
+    logger.debug('Environment variables loaded from .env file');
   }
+} catch (error) {
+  logger.warn('dotenv module not found, skipping .env file loading.');
 }
 
 const config = {
@@ -31,8 +33,10 @@ const config = {
     dimensions: Number(process.env.EMBEDDING_DIMENSIONS) || 1536,
   },
   aws: {
-    region: process.env.AWS_REGION || 'us-east-1',
+    region: 'us-east-1',
     embeddingDimensions: Number(process.env.AWS_EMBEDDING_DIMENSIONS) || 1536,
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || 'your-access-key-id',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || 'your-secret-access-key',
   },
   ollama: {
     apiUrl: process.env.OLLAMA_API_URL || 'http://localhost:11434/api/embed',
@@ -45,6 +49,13 @@ const config = {
     fixedChunkOverlap: Number(process.env.FIXED_CHUNK_OVERLAP) || 100, // Characters
   },
 };
+
+// Log AWS environment variables
+logger.debug('AWS Environment Variables:', {
+  AWS_REGION: process.env.AWS_REGION,
+  AWS_ACCESS_KEY_ID_EXISTS: !!process.env.AWS_ACCESS_KEY_ID,
+  AWS_SECRET_ACCESS_KEY_EXISTS: !!process.env.AWS_SECRET_ACCESS_KEY,
+});
 
 // Validate required environment variables
 const requiredEnvVars: string[] = [];
