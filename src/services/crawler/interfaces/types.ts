@@ -70,8 +70,9 @@ export interface CrawlProgress {
   crawledUrls: number;
   skippedUrls: number;
   totalUrls: number;
-  progress: number;
+  pendingUrls: number;
   percentage: number;
+  progress: number;
 }
 
 /**
@@ -169,7 +170,9 @@ export interface SPADetectorOptions {
  */
 export enum CrawlerState {
   IDLE = 'IDLE',
-  RUNNING = 'RUNNING',
+  INITIALIZING = 'INITIALIZING',
+  CRAWLING = 'CRAWLING',
   PAUSED = 'PAUSED',
+  STOPPING = 'STOPPING',
   ERROR = 'ERROR'
 } 

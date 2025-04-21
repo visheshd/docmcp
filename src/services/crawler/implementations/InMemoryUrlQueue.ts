@@ -19,7 +19,7 @@ export class InMemoryUrlQueue implements IUrlQueue {
     const normalizedUrl = UrlUtils.normalize(url);
     
     // Skip if URL is invalid or already visited
-    if (!UrlUtils.isValid(normalizedUrl) || this.isVisited(normalizedUrl)) {
+    if (this.has(normalizedUrl) || !UrlUtils.isValid(normalizedUrl) || this.isVisited(normalizedUrl)) {
       return;
     }
     
@@ -37,9 +37,13 @@ export class InMemoryUrlQueue implements IUrlQueue {
       const normalizedUrl = UrlUtils.normalize(url);
       return UrlUtils.isValid(normalizedUrl) && !this.isVisited(normalizedUrl);
     });
+
+    const uniqueUrls = validUrls.filter((url, index, self) =>
+      index === self.findIndex((t) => t.url === url.url)
+    );
     
     // Add all valid URLs to the queue
-    this.queue.push(...validUrls.map(({ url, depth }) => ({
+    this.queue.push(...uniqueUrls.map(({ url, depth }) => ({
       url: UrlUtils.normalize(url),
       depth
     })));

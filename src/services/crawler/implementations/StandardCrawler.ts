@@ -49,7 +49,7 @@ export class StandardCrawler extends BaseCrawler {
   public async crawl(jobId: string, startUrl: string, options: CrawlOptions): Promise<void> {
     this.logger.info(`Starting crawl for job ${jobId} at ${startUrl}`);
     this.currentJobId = jobId;
-    this.state = CrawlerState.RUNNING;
+    this.state = CrawlerState.CRAWLING;
 
     try {
       // Initialize crawler and services
@@ -67,7 +67,7 @@ export class StandardCrawler extends BaseCrawler {
       }
 
       // Main crawling loop
-      while (this.state === CrawlerState.RUNNING && this.urlQueue.size() > 0) {
+      while (this.state === CrawlerState.CRAWLING && this.urlQueue.size() > 0) {
         // Check if job should continue
         if (!(await this.jobManager.shouldContinue(jobId))) {
           this.logger.info('Job cancelled or paused');
@@ -195,6 +195,7 @@ export class StandardCrawler extends BaseCrawler {
       crawledUrls,
       skippedUrls: 0, // This would need to be tracked separately
       progress: percentage,
+      pendingUrls: totalUrls - crawledUrls,
       percentage
     };
   }

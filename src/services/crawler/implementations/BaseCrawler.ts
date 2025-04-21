@@ -164,7 +164,8 @@ export abstract class BaseCrawler implements ICrawler {
       crawledUrls,
       pendingUrls,
       skippedUrls: 0, // This would need to be tracked separately
-      progress: Math.min(progress, 100) // Ensure we don't exceed 100%
+      progress: Math.min(progress, 100), // Ensure we don't exceed 100%
+      percentage: progress
     };
   }
 

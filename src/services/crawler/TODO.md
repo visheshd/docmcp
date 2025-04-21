@@ -68,11 +68,11 @@
 - [x] Implement `ServiceFactory`
   - [x] Dependency injection
   - [x] Service instantiation
-- [ ] Implement `StandardCrawler`
-  - [ ] Main crawling loop
-  - [ ] Error handling
-  - [ ] Progress tracking
-  - [ ] Dynamic strategy selection
+- [x] Implement `StandardCrawler`
+  - [x] Main crawling loop
+  - [x] Error handling
+  - [x] Progress tracking
+  - [x] Dynamic strategy selection
 
 ## Phase 6: Testing (Priority: High)
 
