@@ -21,7 +21,7 @@ import logger from '../utils/logger';
 import { JobService } from '../services/job.service';
 import { DocumentService } from '../services/document.service';
 import { DocumentProcessorService } from '../services/document-processor.service';
-import { JobStatus } from '../generated/prisma';
+import { JobStatus, PrismaClient } from '../generated/prisma';
 import { getPrismaClient } from '../config/database';
 
 // Define interface for the CLI arguments
@@ -29,6 +29,7 @@ interface CliArgs {
   'job-id': string;
   wait: boolean;
   verbose: boolean;
+  reprocess: boolean;
   [key: string]: unknown;
 }
 
@@ -111,9 +112,53 @@ async function displayJobProgress(jobId: string, prisma: any): Promise<void> {
 }
 
 /**
+ * Deletes all chunks associated with documents belonging to a specific job.
+ * @param jobId The ID of the job whose chunks should be cleared.
+ * @param prisma PrismaClient instance.
+ */
+async function clearChunksForJob(jobId: string, prisma: PrismaClient): Promise<number> {
+  let deletedCount = 0;
+  try {
+    logger.debug(`Finding document IDs for job ${jobId} to clear chunks.`);
+    // Find all document IDs for the given job
+    const documents = await prisma.document.findMany({
+      where: { jobId: jobId },
+      select: { id: true }
+    });
+
+    if (!documents || documents.length === 0) {
+      logger.info(`No documents found for job ${jobId}, no chunks to clear.`);
+      return 0; // Return 0 deleted
+    }
+
+    const documentIds = documents.map(doc => doc.id);
+    logger.debug(`Found ${documentIds.length} documents for job ${jobId}.`); // Removed listing all IDs for brevity
+
+    logger.info(`Deleting chunks associated with ${documentIds.length} documents for job ${jobId}.`);
+    const deleteResult = await prisma.chunk.deleteMany({
+      where: {
+        documentId: {
+          in: documentIds
+        }
+      }
+    });
+    deletedCount = deleteResult.count;
+    logger.info(`Deleted ${deletedCount} chunks for job ${jobId}.`);
+    
+  } catch (error) {
+    logger.error(`Error clearing chunks for job ${jobId}:`, error);
+    // Log the error but allow reprocessing to continue
+    console.error(`\nError deleting existing chunks: ${error instanceof Error ? error.message : String(error)}`);
+    console.error('Proceeding with reprocessing, but old chunks might remain.');
+    // Return the count known so far, even if incomplete
+  }
+  return deletedCount;
+}
+
+/**
  * Process all documents for a specific job
  */
-async function processDocumentsForJob(jobId: string, prisma: any): Promise<void> {
+async function processDocumentsForJob(jobId: string, prisma: PrismaClient): Promise<void> {
   const jobService = new JobService(prisma);
   const documentService = new DocumentService(prisma);
   const documentProcessorService = new DocumentProcessorService(prisma);
@@ -210,7 +255,7 @@ async function main() {
   
   // Parse command line arguments using yargs and the filtered arguments
   const argv = yargs(filteredArgs)
-    .usage('Usage: $0 --job-id <jobId> [options]')
+    .usage('Usage: $0 --job-id <jobId> [--reprocess] [options]')
     .option('job-id', {
       type: 'string',
       demandOption: true,
@@ -226,6 +271,11 @@ async function main() {
       alias: 'v',
       default: false,
       describe: 'Enable more detailed logging'
+    })
+    .option('reprocess', {
+      type: 'boolean',
+      default: false,
+      describe: 'Delete existing chunks and reprocess all documents for the specified job'
     })
     .epilogue('For more information, see the documentation in the README.md file.')
     .help()
@@ -258,10 +308,44 @@ async function main() {
       
       console.log(`Found job ${job.id} (${job.status})`);
       
+      // --- Reprocessing Logic ---
+      if (argv.reprocess) {
+        logger.info(`Reprocess flag set for job ${job.id}. Deleting existing chunks...`);
+        console.log(`Reprocessing requested. Deleting existing chunks for job ${job.id}...`);
+        
+        const deletedCount = await clearChunksForJob(job.id, prisma);
+        console.log(`Deleted ${deletedCount} existing chunks.`);
+
+        // Reset job progress and stats before reprocessing
+        logger.info(`Resetting progress and stats for job ${job.id} before reprocessing.`);
+        await jobService.updateJobProgress(job.id, 'pending', 0); // Reset status to pending, progress to 0
+        await jobService.updateJobStats(job.id, { // Reset stats (removed 'errors')
+             pagesProcessed: 0, 
+             totalChunks: 0, 
+             pagesSkipped: 0, 
+        }); 
+        // Update job metadata stage if needed, e.g., back to 'crawling' or keep as 'processing'?
+        // Let's leave the stage as is for now, assuming reprocessing stays within the 'processing' context.
+
+        logger.info(`Existing chunks deleted and job state reset for job ${job.id}. Starting reprocessing.`);
+        console.log(`Job state reset. Starting reprocessing...`);
+      }
+      // --- End Reprocessing Logic ---
+      
       if (!argv.wait) {
         // Start the processing in the background
-        processDocumentsForJob(job.id, prisma).catch(error => {
+        processDocumentsForJob(job.id, prisma).catch(async (error) => {
           logger.error(`Unhandled error in background job ${job.id}:`, error);
+          // Update job status to failed and store error message
+           const errorMsg = `Background processing error: ${error instanceof Error ? error.message : String(error)}`;
+           try {
+             // First, update status and progress (progress undefined keeps it as is or resets based on status)
+             await jobService.updateJobProgress(job.id, 'failed', 0); 
+             // Then, update metadata to store the error message
+             await jobService.updateJobMetadata(job.id, { error: errorMsg }); 
+           } catch (e: any) {
+              logger.error(`Failed to update job ${job.id} status/metadata after background error: ${e}`);
+           }
         });
         
         console.log(`Document processing started in the background.`);
@@ -303,17 +387,27 @@ async function main() {
               console.log(`Processed ${jobStats.pagesProcessed || 0} documents`);
               console.log(`Created ${jobStats.totalChunks || 0} chunks`);
             }
-            console.log(`\nDocumentation is now available in the knowledge base.`);
+            console.log(`\nDocumentation processing complete.`);
             process.exit(0);
           } else {
             console.error(`\nJob ended with status: ${finalJob.status}`);
             if (finalJob.error) {
-              console.error(`Error: ${finalJob.error}`);
+              console.error(`Error details: ${finalJob.error}`);
             }
             process.exit(finalJob.status === 'cancelled' || finalJob.status === 'paused' ? 0 : 1);
           }
         } catch (error) {
-          console.error(`Error processing job: ${error instanceof Error ? error.message : String(error)}`);
+          console.error(`\nError during job execution or progress display: ${error instanceof Error ? error.message : String(error)}`);
+           // Attempt to mark job as failed and store error message
+           const errorMsg = `Processing error: ${error instanceof Error ? error.message : String(error)}`;
+           try {
+              // First, update status and progress
+             await jobService.updateJobProgress(job.id, 'failed', 0);
+              // Then, update metadata with the error
+             await jobService.updateJobMetadata(job.id, { error: errorMsg });
+           } catch (e: any) {
+              logger.error(`Failed to update job ${job.id} status/metadata after error: ${e}`);
+           }
           process.exit(1);
         }
       }
@@ -345,8 +439,8 @@ async function main() {
     }
     
   } catch (error) {
-    logger.error('Error during document processing:', error);
-    console.error(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    logger.error('Error during script initialization or argument parsing:', error);
+    console.error(`Initialization Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     process.exit(1);
   }
 }

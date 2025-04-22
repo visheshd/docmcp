@@ -47,6 +47,9 @@ const config = {
     strategy: process.env.CHUNKING_STRATEGY || 'headings', // 'headings' or 'fixed'
     fixedChunkSize: Number(process.env.FIXED_CHUNK_SIZE) || 1000, // Characters
     fixedChunkOverlap: Number(process.env.FIXED_CHUNK_OVERLAP) || 100, // Characters
+    // Added token-based chunking settings
+    tokenChunkSize: Number(process.env.TOKEN_CHUNK_SIZE) || 7000, // Tokens
+    tokenChunkOverlap: Number(process.env.TOKEN_CHUNK_OVERLAP) || 200, // Tokens
   },
 };
 
