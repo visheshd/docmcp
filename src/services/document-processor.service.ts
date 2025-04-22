@@ -1,9 +1,7 @@
-import TurndownService from 'turndown';
-import hljs from 'highlight.js';
-import MarkdownIt from 'markdown-it';
+import { convertHtmlToMarkdown } from 'dom-to-semantic-markdown';
 import { JSDOM } from 'jsdom';
 import { getPrismaClient as getMainPrismaClient } from '../config/database';
-import { PrismaClient } from '../generated/prisma';
+import { PrismaClient, Prisma } from '../generated/prisma';
 import logger from '../utils/logger';
 import { ChunkService } from './chunk.service';
 import { DocumentService } from './document.service';
@@ -13,19 +11,25 @@ import { URL } from 'url'; // Import URL for robust path joining
 // We'll dynamically import AWS dependencies to avoid errors if not installed
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { BedrockEmbeddings } from '@langchain/aws';
+import matter from 'gray-matter'; // We'll use gray-matter to parse frontmatter
 
 // Define the metadata structure
 interface MetadataExtracted {
-  title: string;
-  headings: { level: number; text: string; id?: string }[];
-  codeBlocks: { language: string; code: string }[];
-  tableCount: number;
-  sectionCount: number;
-  links: { text: string; href: string }[];
+  title?: string; // Made optional as it might come from frontmatter
+  headings?: { level: number; text: string; id?: string }[]; // Keep or adjust based on library output
+  codeBlocks?: { language: string; code: string }[]; // Keep or adjust based on library output
+  tableCount?: number; // Keep or adjust based on library output
+  sectionCount?: number; // Keep or adjust based on library output
+  links?: { text: string; href: string }[]; // Keep or adjust based on library output
   package?: string;
   version?: string;
   type?: string;
   tags?: string[];
+  // Add fields expected from dom-to-semantic-markdown's extended metadata if needed
+  openGraph?: Record<string, any>;
+  twitter?: Record<string, any>;
+  jsonLd?: Record<string, any>;
+  // ... any other fields provided by the library's frontmatter
 }
 
 // Define the document chunk interface
@@ -49,8 +53,6 @@ interface DocumentChunk {
 
 export class DocumentProcessorService {
   private prisma: PrismaClient;
-  private turndownService: TurndownService;
-  private markdownIt: MarkdownIt;
   private chunkService: ChunkService;
   private documentService: DocumentService;
   private bedrockClient?: BedrockRuntimeClient; // Type will be BedrockRuntimeClient when imported
@@ -63,40 +65,6 @@ export class DocumentProcessorService {
     
     // Initialize AWS Bedrock client if configured and AWS is enabled
     this.initializeBedrockClient();
-    
-    // Initialize Turndown for HTML to Markdown conversion
-    this.turndownService = new TurndownService({
-      headingStyle: 'atx',       // Use # style headings
-      codeBlockStyle: 'fenced',  // Use ```code``` style blocks
-      emDelimiter: '_',          // Use _text_ for emphasis
-      hr: '---',                 // Use --- for horizontal rules
-      bulletListMarker: '-',     // Use - for bullet lists
-    });
-    
-    // Configure turndown to better handle code blocks
-    this.configureCodeBlocks();
-    
-    // Configure turndown to better handle tables
-    this.configureTables();
-    
-    // Initialize markdown-it for any additional processing
-    this.markdownIt = new MarkdownIt({
-      html: true,          // Enable HTML tags in source
-      xhtmlOut: true,      // Use '/' to close single tags (<br />)
-      breaks: true,        // Convert '\n' in paragraphs into <br>
-      linkify: true,       // Autoconvert URL-like text to links
-      typographer: true,   // Enable some language-neutral replacement + quotes beautification
-      highlight: (str, lang) => {
-        if (lang && hljs.getLanguage(lang)) {
-          try {
-            return hljs.highlight(str, { language: lang }).value;
-          } catch (error) {
-            logger.error(`Failed to highlight code block with language ${lang}:`, error);
-          }
-        }
-        return ''; // Use default escaping
-      }
-    });
   }
 
   /**
@@ -248,418 +216,58 @@ export class DocumentProcessorService {
    */
   async processDocument(documentId: string, html: string, metadata: any = {}): Promise<string> {
     try {
-      // 1. Clean the HTML fragment (using existing method)
-      const cleanedHtmlFragment = this.cleanHtml(html);
+      // 1. Convert HTML to Markdown with extended metadata using dom-to-semantic-markdown
+      //    Need to provide a DOMParser implementation for Node.js
+      const dom = new JSDOM(html);
+      const markdownWithFrontmatter = convertHtmlToMarkdown(html, {
+        includeMetaData: 'extended',
+        overrideDOMParser: new dom.window.DOMParser(), // Provide JSDOM's parser
+        extractMainContent: true, // Optional: Attempt to extract main content if desired
+        enableTableColumnTracking: true // Optional: Enable if useful for LLM context with tables
+      });
+      logger.debug('HTML converted to Markdown with frontmatter.');
 
-      // 2. Wrap the cleaned fragment in basic HTML structure
-      //    Ensures Turndown receives a full document context, though it often handles fragments fine.
-      const wrappedHtml = `<html><body>${cleanedHtmlFragment}</body></html>`;
-      logger.debug('Wrapped cleaned HTML fragment before Markdown conversion.'); // Optional log
+      // 2. Parse the frontmatter and separate content
+      const { data: frontmatterMetadata, content: markdownContent } = matter(markdownWithFrontmatter);
+      logger.debug('Parsed frontmatter from Markdown output.');
 
-      // 3. Convert the wrapped HTML to Markdown
-      const markdown = this.convertToMarkdown(wrappedHtml);
-
-      // 4. Extract additional metadata from the *original* cleaned HTML fragment
-      //    (Metadata extraction works better on HTML DOM than raw Markdown)
-      const extractedMetadata = this.extractMetadata(cleanedHtmlFragment, markdown); // Pass cleaned fragment here
-
-      // 5. Merge extracted metadata with provided metadata
-      const mergedMetadata = {
-        ...extractedMetadata,
-        ...metadata,
+      // 3. Merge extracted metadata with provided metadata
+      //    Frontmatter data takes precedence if keys conflict
+      const mergedMetadata: MetadataExtracted = {
+        ...metadata, // Start with user-provided metadata
+        ...frontmatterMetadata, // Overlay frontmatter data
+        // Ensure 'title' exists, prioritize frontmatter, then user meta, then default
+        title: frontmatterMetadata.title || metadata.title || 'Untitled Document',
+        // You might need to map/transform other fields from frontmatterMetadata 
+        // if they don't directly match MetadataExtracted structure.
+        // For example, if dom-to-semantic-markdown puts headings/links in frontmatter:
+        // headings: frontmatterMetadata.headings || [], 
+        // links: frontmatterMetadata.links || [],
+        // Add default type/tags if not present
+        type: frontmatterMetadata.type || metadata.type || 'documentation',
+        tags: frontmatterMetadata.tags || metadata.tags || ['auto-generated']
       };
 
-      // 6. Chunk the resulting Markdown document
-      const chunks = this.chunkDocument(markdown, mergedMetadata);
+      // 4. Chunk the resulting Markdown content (without frontmatter)
+      const chunks = this.chunkDocument(markdownContent.trim(), mergedMetadata); // Pass content only
       
-      // 7. Create embeddings for chunks and store them
+      // 5. Create embeddings for chunks and store them
       await this.createChunkEmbeddings(chunks, documentId);
       
-      // 8. Update the document record with the final generated Markdown and metadata
+      // 6. Update the document record with the final generated Markdown content and merged metadata
       await this.documentService.updateDocument(documentId, {
-        metadata: mergedMetadata,
+        // Optionally store the pure markdown content if needed
+        // contentMarkdown: markdownContent.trim(), 
+        metadata: mergedMetadata as any, 
       });
       logger.info(`Document ${documentId} processed successfully. Updated metadata.`);
       
-      // Return the generated markdown
-      return markdown;
+      // Return the generated markdown content (without frontmatter)
+      // Or return markdownWithFrontmatter if you need the full output elsewhere
+      return markdownContent.trim(); 
     } catch (error) {
       logger.error(`Error processing document ${documentId}:`, error);
-      // Update document status to reflect error - if status field exists
-      // For now, just log the error, re-throw to let job handler manage status
-      // await this.documentService.updateDocument(documentId, {
-      //   status: 'failed',
-      //   error: `Processing failed: ${error instanceof Error ? error.message : String(error)}`,
-      //   processedAt: new Date(),
-      // }).catch(updateErr => logger.error(`Failed to update document status after error for ${documentId}:`, updateErr));
       throw error; // Re-throw to handle at job level
-    }
-  }
-
-  /**
-   * Clean HTML content by removing unnecessary elements and attributes
-   */
-  private cleanHtml(html: string): string {
-    try {
-      // Use JSDOM to parse HTML
-      const dom = new JSDOM(html);
-      const { document } = dom.window;
-      
-      // Find and remove navigation elements
-      const navigationSelectors = [
-        'nav', 
-        'header', 
-        'footer', 
-        '.navigation', 
-        '.nav', 
-        '.menu',
-        '.sidebar',
-        '#sidebar',
-        '#navigation',
-        '.site-header',
-        '.site-footer'
-      ];
-      
-      navigationSelectors.forEach(selector => {
-        const elements = document.querySelectorAll(selector);
-        elements.forEach(el => {
-          if (el.parentNode) {
-            el.parentNode.removeChild(el);
-          }
-        });
-      });
-      
-      // Remove script and style tags
-      ['script', 'style', 'iframe', 'noscript'].forEach(tag => {
-        const elements = document.querySelectorAll(tag);
-        elements.forEach(el => {
-          if (el.parentNode) {
-            el.parentNode.removeChild(el);
-          }
-        });
-      });
-      
-      // Remove analytics, tracking, and ad-related elements
-      const adSelectors = [
-        '[id*="google"]',
-        '[id*="ad-"]',
-        '[id*="analytics"]',
-        '[class*="ad-"]',
-        '[class*="advertisement"]',
-        '[data-ad]'
-      ];
-      
-      adSelectors.forEach(selector => {
-        try {
-          const elements = document.querySelectorAll(selector);
-          elements.forEach(el => {
-            if (el.parentNode) {
-              el.parentNode.removeChild(el);
-            }
-          });
-        } catch (error) {
-          // Some complex selectors might fail, we can safely ignore those
-          logger.debug(`Failed to query selector: ${selector}`);
-        }
-      });
-      
-      // Return the cleaned HTML
-      return dom.serialize();
-    } catch (error) {
-      logger.error('Error cleaning HTML:', error);
-      return html; // Return original HTML if cleaning fails
-    }
-  }
-
-  /**
-   * Convert HTML to Markdown using Turndown
-   */
-  private convertToMarkdown(html: string): string {
-    const markdown = this.turndownService.turndown(html);
-    return this.normalizeMarkdown(markdown);
-  }
-
-  /**
-   * Normalize markdown content for consistency
-   */
-  private normalizeMarkdown(markdown: string): string {
-    let normalized = markdown;
-    
-    // Fix common markdown inconsistencies
-    normalized = this.fixConsecutiveHeadings(normalized);
-    normalized = this.fixExcessiveNewlines(normalized);
-    normalized = this.fixListSpacing(normalized);
-    normalized = this.standardizeLinks(normalized);
-    
-    return normalized;
-  }
-  
-  /**
-   * Fix cases where headings are directly adjacent without content between them
-   */
-  private fixConsecutiveHeadings(markdown: string): string {
-    // Add a line break between consecutive headings
-    return markdown.replace(/^(#{1,6} .+?)(\n)(#{1,6} .+?)$/gm, '$1\n$2$3');
-  }
-  
-  /**
-   * Remove excessive newlines to normalize spacing
-   */
-  private fixExcessiveNewlines(markdown: string): string {
-    // Replace 3+ consecutive newlines with just 2
-    return markdown.replace(/\n{3,}/g, '\n\n');
-  }
-  
-  /**
-   * Fix spacing around lists for better readability
-   */
-  private fixListSpacing(markdown: string): string {
-    // Ensure there's a blank line before lists
-    let normalized = markdown.replace(/([^\n])\n([-*+] )/g, '$1\n\n$2');
-    
-    // Ensure there's proper indentation for nested lists
-    normalized = normalized.replace(/\n([-*+] .*)\n\s*([-*+] )/g, '\n$1\n    $2');
-    
-    return normalized;
-  }
-  
-  /**
-   * Standardize link formats in markdown
-   */
-  private standardizeLinks(markdown: string): string {
-    // Convert HTML links to markdown format
-    let normalized = markdown.replace(/<a href="([^"]+)"[^>]*>([^<]+)<\/a>/g, '[$2]($1)');
-    
-    // Fix link references: [text] [ref] -> [text][ref]
-    normalized = normalized.replace(/\[([^\]]+)\] \[([^\]]+)\]/g, '[$1][$2]');
-    
-    return normalized;
-  }
-
-  /**
-   * Configure how code blocks are processed
-   */
-  private configureCodeBlocks(): void {
-    // Add rule for handling <pre><code> blocks with language detection
-    this.turndownService.addRule('fencedCodeBlocks', {
-      filter: function(node) {
-        return (
-          node.nodeName === 'PRE' &&
-          node.firstChild !== null &&
-          node.firstChild.nodeName === 'CODE'
-        );
-      },
-      replacement: function(content, node) {
-        const code = node.firstChild as HTMLElement;
-        let language = '';
-        
-        // Try to detect language from class
-        if (code.classList && code.classList.length > 0) {
-          for (let i = 0; i < code.classList.length; i++) {
-            const className = code.classList[i];
-            if (
-              className.startsWith('language-') ||
-              className.startsWith('lang-')
-            ) {
-              language = className.replace(/^(language-|lang-)/, '');
-              break;
-            }
-          }
-        }
-        
-        // Clean up the content - remove leading/trailing whitespace
-        const cleanContent = content.trim();
-        
-        // Return fenced code block with language (if detected)
-        return `\n\`\`\`${language}\n${cleanContent}\n\`\`\`\n`;
-      }
-    });
-  }
-
-  /**
-   * Configure how tables are processed
-   */
-  private configureTables(): void {
-    // Use a standard table handling approach with clean headers and content
-    this.turndownService.addRule('tableSimple', {
-      filter: 'table',
-      replacement: function(content, node) {
-        // Create a markdown table string
-        let markdown = '\n';
-        
-        // Convert the node to a DOM element and get all rows
-        const rows = Array.from(node.querySelectorAll('tr'));
-        if (!rows || rows.length === 0) {
-          return content; // Fall back to default handling
-        }
-        
-        // Process header row if it exists
-        const headerRow = rows[0];
-        const headerCells = Array.from(headerRow.querySelectorAll('th'));
-        
-        if (headerCells && headerCells.length > 0) {
-          // Process as a table with headers
-          const headers = headerCells.map(cell => cell.textContent?.trim() || ' ');
-          
-          // Add header row
-          markdown += '| ' + headers.join(' | ') + ' |\n';
-          
-          // Add separator row
-          markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
-          
-          // Process data rows (skip the first row if it's all headers)
-          for (let i = headerCells.length === headerRow.children.length ? 1 : 0; i < rows.length; i++) {
-            const row = rows[i];
-            const cells = Array.from(row.querySelectorAll('td'));
-            
-            if (cells && cells.length > 0) {
-              const rowData = cells.map(cell => cell.textContent?.trim() || ' ');
-              
-              // Pad with empty cells if needed
-              while (rowData.length < headers.length) {
-                rowData.push(' ');
-              }
-              
-              markdown += '| ' + rowData.join(' | ') + ' |\n';
-            }
-          }
-        } else {
-          // Process as a table without explicit headers
-          // Use the first row as header
-          const firstRow = rows[0];
-          const firstRowCells = Array.from(firstRow.querySelectorAll('td'));
-          
-          if (firstRowCells && firstRowCells.length > 0) {
-            // Use first row data as column headers
-            const headers = firstRowCells.map(cell => cell.textContent?.trim() || ' ');
-            
-            // Add header row (from first data row)
-            markdown += '| ' + headers.join(' | ') + ' |\n';
-            
-            // Add separator row
-            markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
-            
-            // Add remaining rows
-            for (let i = 1; i < rows.length; i++) {
-              const row = rows[i];
-              const cells = Array.from(row.querySelectorAll('td'));
-              
-              if (cells && cells.length > 0) {
-                const rowData = cells.map(cell => cell.textContent?.trim() || ' ');
-                
-                // Pad with empty cells if needed
-                while (rowData.length < headers.length) {
-                  rowData.push(' ');
-                }
-                
-                markdown += '| ' + rowData.join(' | ') + ' |\n';
-              }
-            }
-          } else {
-            // Fall back to default handling
-            return content;
-          }
-        }
-        
-        return markdown + '\n';
-      }
-    });
-  }
-
-  /**
-   * Extract metadata from HTML and markdown content
-   */
-  private extractMetadata(html: string, markdown: string): MetadataExtracted {
-    try {
-      const dom = new JSDOM(html);
-      const { document } = dom.window;
-      
-      // Extract title
-      const titleElement = document.querySelector('title') || document.querySelector('h1');
-      const title = titleElement ? titleElement.textContent?.trim() || '' : '';
-      
-      // Extract headings
-      const headings: { level: number; text: string; id?: string }[] = [];
-      for (let i = 1; i <= 6; i++) {
-        const elements = document.querySelectorAll(`h${i}`);
-        elements.forEach(el => {
-          headings.push({
-            level: i,
-            text: el.textContent?.trim() || '',
-            id: el.id || undefined
-          });
-        });
-      }
-      
-      // Extract code blocks
-      const codeBlocks: { language: string; code: string }[] = [];
-      const preCodeElements = document.querySelectorAll('pre code');
-      preCodeElements.forEach(el => {
-        let language = '';
-        if (el.classList && el.classList.length > 0) {
-          for (let i = 0; i < el.classList.length; i++) {
-            const className = el.classList[i];
-            if (className.startsWith('language-') || className.startsWith('lang-')) {
-              language = className.replace(/^(language-|lang-)/, '');
-              break;
-            }
-          }
-        }
-        
-        codeBlocks.push({
-          language,
-          code: el.textContent?.trim() || ''
-        });
-      });
-      
-      // Count tables
-      const tableCount = document.querySelectorAll('table').length;
-      
-      // Count sections (approximately by looking at heading levels)
-      const sectionCount = headings.length;
-      
-      // Extract links
-      const links: { text: string; href: string }[] = [];
-      const linkElements = document.querySelectorAll('a[href]');
-      linkElements.forEach(el => {
-        const href = el.getAttribute('href') || '';
-        if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
-          links.push({
-            text: el.textContent?.trim() || '',
-            href
-          });
-        }
-      });
-      
-      // Extract package and version metadata from meta tags
-      const packageMeta = document.querySelector('meta[name="package"]');
-      const versionMeta = document.querySelector('meta[name="version"]');
-      
-      return {
-        title,
-        headings,
-        codeBlocks,
-        tableCount,
-        sectionCount,
-        links,
-        package: packageMeta?.getAttribute('content') || undefined,
-        version: versionMeta?.getAttribute('content') || undefined,
-        type: 'documentation',
-        tags: ['auto-generated']
-      };
-    } catch (error) {
-      logger.error('Error extracting metadata:', error);
-      // Return minimal metadata in case of error
-      return {
-        title: '',
-        headings: [],
-        codeBlocks: [],
-        tableCount: 0,
-        sectionCount: 0,
-        links: [],
-        type: 'documentation',
-        tags: ['auto-generated']
-      };
     }
   }
 
@@ -768,8 +376,13 @@ export class DocumentProcessorService {
     
     // Process each section
     sections.forEach((section, index) => {
+      // Ignore empty sections that might result from splitting
+      if (section.trim().length === 0) {
+        return;
+      }
+
       // Determine section heading (if any)
-      const headingMatch = section.match(/^(#+)\\s+(.+)$/m); 
+      const headingMatch = section.match(/^(#+)\s+(.+)$/m); 
       const headingLevel = headingMatch ? headingMatch[1].length : 0;
       const sectionHeading = headingMatch ? headingMatch[2].trim() : undefined;
       
@@ -778,10 +391,12 @@ export class DocumentProcessorService {
       
       // Function to add a chunk, splitting if necessary
       const addChunk = (content: string, type: 'content' | 'code' | 'table', orderOffset: number, language?: string) => {
+        if (content.trim().length === 0) return; // Skip empty content
+
         if (content.length <= MAX_SECTION_CHARS || type !== 'content') {
           // If content is within limits or not a main content chunk, add it directly
           chunks.push({
-            content: content,
+            content: content.trim(), // Trim content before adding
             metadata: {
               title: metadata.title || 'Untitled Document',
               sectionHeading,
@@ -789,7 +404,7 @@ export class DocumentProcessorService {
               headingLevel,
               sectionIndex: index,
               language: type === 'code' ? language : undefined,
-              order: index + orderOffset,
+              order: chunks.length, // Use simple incrementing order for now
               type: type
             }
           });
@@ -803,54 +418,64 @@ export class DocumentProcessorService {
           for (let i = 0; i < numSubsections; i++) {
             const start = i * subsectionSize;
             const end = Math.min((i + 1) * subsectionSize, content.length);
-            const subsectionContent = content.substring(start, end);
-            
-            chunks.push({
-              content: subsectionContent,
-              metadata: {
-                title: metadata.title || 'Untitled Document',
-                sectionHeading,
-                parentHeading,
-                headingLevel,
-                sectionIndex: index,
-                subsectionIndex: i, // Mark as a subsection
-                order: index + orderOffset + (i * 0.01), // Keep subsections ordered
-                type: 'content'
-              }
-            });
+            const subsectionContent = content.substring(start, end).trim(); // Trim subsection
+
+            if (subsectionContent.length > 0) { // Only add non-empty subsections
+                chunks.push({
+                  content: subsectionContent,
+                  metadata: {
+                    title: metadata.title || 'Untitled Document',
+                    sectionHeading,
+                    parentHeading,
+                    headingLevel,
+                    sectionIndex: index,
+                    subsectionIndex: i, // Mark as a subsection
+                    order: chunks.length, // Use simple incrementing order
+                    type: 'content'
+                  }
+                });
+            }
           }
         }
       };
 
       // Add the main content chunk(s) for this section
-      addChunk(section.substring(headingMatch ? headingMatch[0].length : 0).trim(), 'content', 0);
+      // Extract content *after* the heading line if a heading exists
+      const mainContent = headingMatch ? section.substring(headingMatch[0].length).trim() : section.trim();
+      addChunk(mainContent, 'content', 0);
             
       // Extract code blocks from the section and add them
-      const codeBlockRegex = /```([a-z]*)\\n([\\s\\S]*?)```/g;
-      let match;
-      let position = 0.1; // Start code blocks slightly after main content
+      // Regex needs refinement to handle escaped backticks within code blocks
+      // Using a simpler regex for now, might need adjustment
+      const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g; 
+      let codeMatch;
       
-      while ((match = codeBlockRegex.exec(section)) !== null) {
-        const language = match[1] || 'text';
-        const code = match[2];
+      // Process code blocks separately to avoid them being chunked with main content
+      while ((codeMatch = codeBlockRegex.exec(section)) !== null) {
+        const language = codeMatch[1] || 'text';
+        const code = codeMatch[2].trim();
         
-        if (code.trim().length > 50) {
-          addChunk(code, 'code', position, language);
-          position += 0.1;
+        if (code.length > 0) { // Add only non-empty code blocks
+          addChunk(code, 'code', 0.1, language); // Use fractional order offset if needed, or just rely on array order
         }
       }
       
       // Process tables separately
-      const tableRegex = /\\|[^\\n]+\\|\\n\\|(?:[-:]+\\|)+\\n(\\|[^\\n]+\\|\\n)+/g;
-      // Reset position for tables, starting after code blocks
-      position = Math.ceil(position); 
+      // Regex needs refinement to handle complex table structures
+      const tableRegex = /(\|.*\n)+(?:\|[-: ]+)+\|(?:\n\|.*\|)+/g; 
+      let tableMatch;
       
-      while ((match = tableRegex.exec(section)) !== null) {
-         addChunk(match[0], 'table', position);
-         position += 0.1;
+      while ((tableMatch = tableRegex.exec(section)) !== null) {
+         const tableContent = tableMatch[0].trim();
+         if (tableContent.length > 0) {
+           addChunk(tableContent, 'table', 0.2); // Use fractional order offset or rely on array order
+         }
       }
     });
     
+    // Re-assign order based on final array position
+    chunks.forEach((chunk, idx) => chunk.metadata.order = idx);
+
     logger.debug(`Created ${chunks.length} chunks from document with title "${metadata.title || 'Untitled'}"`);
     return chunks;
   }
@@ -868,8 +493,9 @@ export class DocumentProcessorService {
         const heading = headingMatch[2].trim();
         hierarchy.push({ heading, level, index });
       } else {
-        // For sections without headings, treat as level 0 (top level)
-        hierarchy.push({ heading: '', level: 0, index });
+        // For sections without headings, treat as level 0 (top level) - or assign a high level?
+        // Assigning level 7 to non-heading sections to place them contextually
+        hierarchy.push({ heading: '', level: 7, index }); 
       }
     });
     
@@ -883,55 +509,88 @@ export class DocumentProcessorService {
     hierarchy: Array<{heading: string, level: number, index: number}>, 
     currentLevel: number, 
     currentIndex: number
-  ): string {
+  ): string | undefined { // Return undefined if no parent
     // If this is a top-level heading or not a heading, it has no parent
-    if (currentLevel <= 1) {
-      return '';
+    if (currentLevel <= 1 || currentLevel > 6) { // Consider level 7 (no heading) as having no parent
+      return undefined;
     }
     
-    // Look backwards through the hierarchy to find the nearest heading with a level one above this one
+    // Look backwards through the hierarchy to find the nearest heading with a level one less than this one
     for (let i = currentIndex - 1; i >= 0; i--) {
       const entry = hierarchy[i];
-      if (entry.level > 0 && entry.level < currentLevel) {
+      // Found a direct parent
+      if (entry.level === currentLevel - 1) { 
         return entry.heading;
+      }
+      // Found a higher-level ancestor, stop searching this path upwards
+      if (entry.level < currentLevel -1) {
+        break; 
+      }
+    }
+
+    // If no direct parent found with level-1, look for the nearest ancestor with *any* lower level
+     for (let i = currentIndex - 1; i >= 0; i--) {
+      const entry = hierarchy[i];
+      if (entry.level > 0 && entry.level < currentLevel) {
+        return entry.heading; // Return the closest ancestor
       }
     }
     
-    return '';
+    return undefined; // No parent found
   }
 
   /**
    * Split markdown content by headings to create sections
    */
   private splitByHeadings(markdown: string): string[] {
-    // Split by heading markers (# or ## or ### etc.)
-    const headingRegex = /^(#{1,6}\s+.+)$/gm;
+    // Split by heading markers (# or ## or ### etc.) at the beginning of a line
+    // Ensure we handle different line endings (\r\n, \n)
+    const headingRegex = /^#{1,6}\s+.*/gm;
     const sections: string[] = [];
     let lastIndex = 0;
-    let match;
     
-    // Look for matches to the heading regex pattern
-    while ((match = headingRegex.exec(markdown)) !== null) {
-      // If this isn't the first match, add the preceding content as a section
-      if (match.index > lastIndex) {
-        sections.push(markdown.substring(lastIndex, match.index).trim());
+    // Use String.prototype.split with a capturing group to keep delimiters
+    // The regex captures the heading line itself.
+    const parts = markdown.split(/^((?:#{1,6}\s+.*)(?:\r?\n)?)/m);
+
+    // The split result alternates between content and headings (or undefined/empty strings)
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (part === undefined) continue;
+
+      // Check if the part is a heading (matches our regex)
+      if (i > 0 && /^#{1,6}\s+.*/m.test(part)) {
+        // This part is a heading. The previous part was the content before it.
+        const contentBefore = parts[i - 1]?.trim();
+        if (contentBefore) {
+          // If the *previous* section didn't start with a heading, this content belongs to it.
+          if (sections.length > 0 && !/^#{1,6}\s+.*/m.test(sections[sections.length - 1])) {
+             sections[sections.length - 1] += '\n\n' + contentBefore;
+          } else {
+            sections.push(contentBefore); // Should ideally not happen if structure is good
+          }
+        }
+        // Start a new section with the current heading
+        sections.push(part.trim());
+      } else if (i === parts.length - 1 && part.trim()) {
+         // Last part - could be content after the last heading or the only content
+         if (sections.length > 0 && /^#{1,6}\s+.*/m.test(sections[sections.length - 1])) {
+           // Append to the last section (which is a heading)
+           sections[sections.length - 1] += '\n\n' + part.trim();
+         } else if (sections.length > 0) {
+           // Append to last section (which is content)
+           sections[sections.length - 1] += '\n\n' + part.trim();
+         }
+          else {
+           // Only content, no headings found
+           sections.push(part.trim());
+         }
       }
-      
-      // Start the new section with this heading
-      lastIndex = match.index;
+      // Intermediate non-heading parts are handled when the next heading is found (or at the end)
     }
     
-    // Add the final section
-    if (lastIndex < markdown.length) {
-      sections.push(markdown.substring(lastIndex).trim());
-    }
-    
-    // If no headings were found, just return the entire document as one section
-    if (sections.length === 0) {
-      sections.push(markdown);
-    }
-    
-    return sections;
+    // Filter out any potentially empty sections that might arise from splitting edge cases
+    return sections.filter(s => s.length > 0);
   }
 
   /**
@@ -942,13 +601,17 @@ export class DocumentProcessorService {
   private async createChunkEmbeddings(chunks: DocumentChunk[], documentId: string): Promise<void> {
     try {
       // Skip embedding creation if no chunks
-      if (!chunks.length) {
+      if (!chunks || chunks.length === 0) {
+        logger.info(`No chunks provided for document ${documentId}. Skipping embedding generation.`);
         return;
       }
 
       // Check if AWS Bedrock is initialized
       if (!this.embeddings) {
-        throw new Error('AWS Bedrock embedding client not initialized. Check your configuration.');
+        // Log warning instead of throwing error if embeddings are optional
+        logger.warn(`AWS Bedrock embedding client not initialized. Skipping embedding generation for document ${documentId}. Check your configuration.`);
+        return;
+        // throw new Error('AWS Bedrock embedding client not initialized. Check your configuration.');
       }
 
       // Process chunks in batches
@@ -963,26 +626,34 @@ export class DocumentProcessorService {
         const batchChunks = chunks.slice(i, i + batchSize);
         // Process each chunk sequentially to avoid overwhelming the API
         for (const chunk of batchChunks) {
+          // Ensure chunk content is valid before attempting embedding
+          if (!chunk.content || typeof chunk.content !== 'string' || chunk.content.trim().length === 0) {
+            logger.warn(`Skipping empty or invalid chunk (order: ${chunk.metadata.order}) for document ${documentId}`);
+            continue; // Skip this chunk
+          }
+          
           try {
             // Add a small delay between requests to avoid rate limiting
             if (i > 0 || batchChunks.indexOf(chunk) > 0) {
               await new Promise(resolve => setTimeout(resolve, 200));
             }
             
-            logger.debug(`Generating embedding for chunk ${chunksWithEmbeddings.length + 1}/${chunks.length} from document ${documentId}`);
+            logger.debug(`Generating embedding for chunk ${successCount + errorCount + 1}/${chunks.length} (order: ${chunk.metadata.order}) from document ${documentId}`);
             const embedding = await this.createEmbedding(chunk.content);
             
             chunksWithEmbeddings.push({
-              ...chunk,
-              embedding
+              documentId, // Add documentId here for createManyChunks
+              content: chunk.content,
+              embedding: embedding,
+              metadata: chunk.metadata
             });
             
             successCount++;
           } catch (error: any) {
             errorCount++;
             // Provide detailed error information to help diagnose issues
-            logger.error(`Failed to generate embedding for a chunk in document ${documentId}, skipping chunk.`, { 
-              chunkContentStart: chunk.content.substring(0, 100),
+            logger.error(`Failed to generate embedding for chunk (order: ${chunk.metadata.order}) in document ${documentId}, skipping chunk.`, { 
+              chunkContentStart: chunk.content.substring(0, 100) + '...',
               chunkContentLength: chunk.content.length,
               chunkType: chunk.metadata.type,
               errorMessage: error.message,
@@ -991,7 +662,7 @@ export class DocumentProcessorService {
             });
             
             // If too many consecutive errors, consider backing off
-            if (errorCount > 5 && errorCount === i + batchChunks.indexOf(chunk) + 1) {
+            if (errorCount > 5 && errorCount === (successCount + errorCount)) { // Check if *all* attempts so far failed
               logger.warn(`Encountered ${errorCount} consecutive embedding errors. Adding longer backoff delay.`);
               await new Promise(resolve => setTimeout(resolve, 2000)); // 2-second backoff
             }
@@ -1006,18 +677,13 @@ export class DocumentProcessorService {
 
       // Store chunks that successfully received embeddings
       if (chunksWithEmbeddings.length > 0) {
-        await this.chunkService.createManyChunks(
-          chunksWithEmbeddings.map(chunk => ({
-            documentId,
-            content: chunk.content,
-            embedding: chunk.embedding,
-            metadata: chunk.metadata
-          })), 
-          documentId
-        );
-        logger.info(`Successfully created ${chunksWithEmbeddings.length}/${chunks.length} chunk embeddings for document ${documentId}`);
+        // Pass the array directly as it now contains the required structure
+        await this.chunkService.createManyChunks(chunksWithEmbeddings, documentId); 
+        logger.info(`Successfully created ${chunksWithEmbeddings.length}/${chunks.length - errorCount} chunk embeddings for document ${documentId}`);
+      } else if (errorCount < chunks.length) {
+         logger.warn(`No chunk embeddings were successfully generated for document ${documentId}, although ${chunks.length - errorCount} chunks were processed.`);
       } else {
-        logger.warn(`No chunk embeddings were successfully generated for document ${documentId}`);
+         logger.error(`All ${chunks.length} embedding attempts failed for document ${documentId}.`);
       }
 
       // Log embedding statistics
@@ -1030,7 +696,9 @@ export class DocumentProcessorService {
         stack: error.stack,
         chunksCount: chunks.length
       });
-      throw error;
+      // Decide if this error should stop the overall document processing
+      // For now, re-throw, but maybe log and continue if embeddings are non-critical
+      throw error; 
     }
   }
 }
