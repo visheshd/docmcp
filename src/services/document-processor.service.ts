@@ -37,6 +37,7 @@ interface DocumentChunk {
     parentHeading?: string;
     headingLevel?: number;
     sectionIndex?: number;
+    subsectionIndex?: number;
     language?: string;
     chunkIndex?: number;
     start?: number;
@@ -162,17 +163,33 @@ export class DocumentProcessorService {
   async createEmbedding(text: string): Promise<number[]> {
     const maxRetries = 3;
     let retryDelay = 1000; // 1 second base delay
+    // Bedrock has an 8192 token limit - set MUCH lower max to force pre-truncation
+    const MAX_TOKENS = 3500; // Drastically reduced limit
 
     if (!this.embeddings) {
       throw new Error('AWS Bedrock embedding client not initialized. Check your configuration.');
     }
 
+    // Estimate token count (more conservative estimate: 3 chars = 1 token)
+    const estimatedTokens = Math.ceil(text.length / 3);
+    
+    // If text is likely too large (based on our new stricter MAX_TOKENS), truncate it
+    let processedText = text;
+    if (estimatedTokens > MAX_TOKENS) {
+      logger.warn(`Text likely exceeds STRICT token limit (est. ${estimatedTokens} tokens > ${MAX_TOKENS}). Applying pre-emptive truncation.`);
+      // Truncate to approximately MAX_TOKENS * 3 chars
+      processedText = text.substring(0, MAX_TOKENS * 3);
+      logger.debug(`Truncated text from ${text.length} to ${processedText.length} characters (${Math.ceil(processedText.length / 3)} est. tokens)`);
+    } else {
+      logger.debug(`Text estimated tokens (${estimatedTokens}) is within strict limit (${MAX_TOKENS}). No pre-emptive truncation.`);
+    }
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        logger.debug(`Sending embedding request to AWS Bedrock, attempt ${attempt}`);
+        logger.debug(`Sending embedding request to AWS Bedrock, attempt ${attempt} with ${Math.ceil(processedText.length / 3)} est. tokens`);
         
         // Use LangChain's BedrockEmbeddings to get the embedding
-        const result = await this.embeddings.embedQuery(text);
+        const result = await this.embeddings.embedQuery(processedText);
         
         // Verify dimensions match what we expect
         if (config.aws?.embeddingDimensions && 
@@ -182,17 +199,37 @@ export class DocumentProcessorService {
         
         return result;
       } catch (error: any) {
+        const isTokenLimitError = error.message && 
+          (error.message.includes("Too many input tokens") || 
+           error.message.includes("token limit"));
+        
         logger.warn(`AWS Bedrock embedding request failed (Attempt ${attempt}/${maxRetries})`, {
           errorMessage: error.message,
           errorCode: error.code,
           errorType: error.$metadata?.httpStatusCode,
-          chunkStart: text.substring(0, 50) + '...'
+          isTokenLimitError,
+          textLength: processedText.length,
+          estimatedTokens: Math.ceil(processedText.length / 3),
+          chunkStart: processedText.substring(0, 50) + '...'
         });
+
+        // If we're hitting token limits, try more aggressive truncation
+        if (isTokenLimitError) {
+          // Reduce text size further for next attempt (if not the last attempt)
+          if (attempt < maxRetries) {
+            const previousLength = processedText.length;
+            // More aggressive truncation - reduce by 50% instead of 30%
+            processedText = processedText.substring(0, Math.floor(processedText.length * 0.5));
+            logger.debug(`Token limit exceeded. Aggressively truncating text from ${previousLength} to ${processedText.length} characters (${Math.ceil(processedText.length / 3)} est. tokens)`);
+          }
+        }
 
         if (attempt === maxRetries) {
           logger.error(`AWS Bedrock embedding request failed after ${maxRetries} attempts.`, { 
-            chunkStart: text.substring(0, 100) + '...',
-            finalErrorMessage: error.message
+            chunkStart: processedText.substring(0, 100) + '...',
+            finalErrorMessage: error.message,
+            finalLength: processedText.length,
+            finalEstimatedTokens: Math.ceil(processedText.length / 3)
           });
           throw error;
         }
@@ -211,37 +248,51 @@ export class DocumentProcessorService {
    */
   async processDocument(documentId: string, html: string, metadata: any = {}): Promise<string> {
     try {
-      // Clean the HTML content first
-      const cleanedHtml = this.cleanHtml(html);
-      
-      // Convert the cleaned HTML to Markdown
-      const markdown = this.convertToMarkdown(cleanedHtml);
-      
-      // Extract additional metadata from the document
-      const extractedMetadata = this.extractMetadata(cleanedHtml, markdown);
-      
-      // Merge extracted metadata with provided metadata
+      // 1. Clean the HTML fragment (using existing method)
+      const cleanedHtmlFragment = this.cleanHtml(html);
+
+      // 2. Wrap the cleaned fragment in basic HTML structure
+      //    Ensures Turndown receives a full document context, though it often handles fragments fine.
+      const wrappedHtml = `<html><body>${cleanedHtmlFragment}</body></html>`;
+      logger.debug('Wrapped cleaned HTML fragment before Markdown conversion.'); // Optional log
+
+      // 3. Convert the wrapped HTML to Markdown
+      const markdown = this.convertToMarkdown(wrappedHtml);
+
+      // 4. Extract additional metadata from the *original* cleaned HTML fragment
+      //    (Metadata extraction works better on HTML DOM than raw Markdown)
+      const extractedMetadata = this.extractMetadata(cleanedHtmlFragment, markdown); // Pass cleaned fragment here
+
+      // 5. Merge extracted metadata with provided metadata
       const mergedMetadata = {
         ...extractedMetadata,
         ...metadata,
       };
-      
-      // Chunk the document for efficient storage and retrieval
+
+      // 6. Chunk the resulting Markdown document
       const chunks = this.chunkDocument(markdown, mergedMetadata);
       
-      // Create embeddings for chunks and store them
+      // 7. Create embeddings for chunks and store them
       await this.createChunkEmbeddings(chunks, documentId);
       
-      // Update the document with processed markdown and metadata
+      // 8. Update the document record with the final generated Markdown and metadata
       await this.documentService.updateDocument(documentId, {
-        content: markdown,
         metadata: mergedMetadata,
       });
+      logger.info(`Document ${documentId} processed successfully. Updated metadata.`);
       
+      // Return the generated markdown
       return markdown;
     } catch (error) {
       logger.error(`Error processing document ${documentId}:`, error);
-      throw error;
+      // Update document status to reflect error - if status field exists
+      // For now, just log the error, re-throw to let job handler manage status
+      // await this.documentService.updateDocument(documentId, {
+      //   status: 'failed',
+      //   error: `Processing failed: ${error instanceof Error ? error.message : String(error)}`,
+      //   processedAt: new Date(),
+      // }).catch(updateErr => logger.error(`Failed to update document status after error for ${documentId}:`, updateErr));
+      throw error; // Re-throw to handle at job level
     }
   }
 
@@ -636,14 +687,27 @@ export class DocumentProcessorService {
   private chunkDocumentFixedSize(
     markdown: string, 
     docMetadata: any, 
-    chunkSize: number, 
-    overlap: number
+    chunkSize: number = 6000, // Reduced default chunk size
+    overlap: number = 200     // Reduced default overlap
   ): DocumentChunk[] {
     const chunks: DocumentChunk[] = [];
     let startIndex = 0;
     let chunkIndex = 0;
+    
+    // Apply chunk size from config or use the default reduced size
+    const configChunkSize = config.chunking.fixedChunkSize || chunkSize;
+    const configOverlap = config.chunking.fixedChunkOverlap || overlap;
+    
+    // Make sure chunk size is safe for token limits (approx 4 chars per token)
+    // Bedrock has an 8192 token limit, so we aim for ~7000 tokens max
+    const SAFE_TOKENS = 7000;
+    const adjustedChunkSize = Math.min(configChunkSize, SAFE_TOKENS * 4);
+    
+    if (adjustedChunkSize < configChunkSize) {
+      logger.debug(`Reducing configured chunk size from ${configChunkSize} to ${adjustedChunkSize} to fit token limits`);
+    }
 
-    if (chunkSize <= overlap) {
+    if (adjustedChunkSize <= configOverlap) {
       logger.error('Chunk size must be greater than overlap. Using full document as one chunk.');
       return [{
         content: markdown,
@@ -656,7 +720,7 @@ export class DocumentProcessorService {
     }
 
     while (startIndex < markdown.length) {
-      const endIndex = Math.min(startIndex + chunkSize, markdown.length);
+      const endIndex = Math.min(startIndex + adjustedChunkSize, markdown.length);
       const chunkContent = markdown.substring(startIndex, endIndex);
       
       chunks.push({
@@ -672,10 +736,10 @@ export class DocumentProcessorService {
       });
       
       chunkIndex++;
-      startIndex += chunkSize - overlap;
+      startIndex += adjustedChunkSize - configOverlap;
       
       // Prevent infinite loop if overlap is too large or chunk size too small
-      if (startIndex >= markdown.length || chunkSize - overlap <= 0) {
+      if (startIndex >= markdown.length || adjustedChunkSize - configOverlap <= 0) {
         break;
       }
     }
@@ -685,7 +749,7 @@ export class DocumentProcessorService {
 
   /**
    * Chunk document by splitting based on headings.
-   * (Renamed from chunkDocument)
+   * Large sections will be further split to meet token limits.
    */
   private chunkDocumentByHeadings(markdown: string, metadata: any): DocumentChunk[] {
     const chunks: DocumentChunk[] = [];
@@ -696,80 +760,98 @@ export class DocumentProcessorService {
     // Create a document hierarchy based on headings
     const hierarchy = this.createDocumentHierarchy(sections);
     
+    // Bedrock has an 8192 token limit, we aim for ~5000 tokens max (more conservative)
+    const MAX_SECTION_TOKENS = 5000;
+    const MAX_SECTION_CHARS = MAX_SECTION_TOKENS * 3; // More conservative: 3 chars per token
+    
+    logger.debug(`Chunking document with title "${metadata.title || 'Untitled'}" into sections. ${sections.length} sections detected.`);
+    
     // Process each section
     sections.forEach((section, index) => {
       // Determine section heading (if any)
-      const headingMatch = section.match(/^(#+)\s+(.+)$/m);
+      const headingMatch = section.match(/^(#+)\\s+(.+)$/m); 
       const headingLevel = headingMatch ? headingMatch[1].length : 0;
       const sectionHeading = headingMatch ? headingMatch[2].trim() : undefined;
       
       // Determine parent relationships based on heading levels
       const parentHeading = this.findParentHeading(hierarchy, headingLevel, index);
       
-      // Extract code blocks from the section
-      const codeBlockRegex = /```([a-z]*)\n([\s\S]*?)```/g;
-      let match;
-      let position = 0;
-      
-      // Add the main content chunk for this section
-      chunks.push({
-        content: section,
-        metadata: {
-          title: metadata.title || 'Untitled Document',
-          sectionHeading,
-          parentHeading,
-          headingLevel,
-          sectionIndex: index,
-          order: index,
-          type: 'content'
-        }
-      });
-      
-      // Process code blocks separately
-      while ((match = codeBlockRegex.exec(section)) !== null) {
-        const language = match[1] || 'text';
-        const code = match[2];
-        
-        // Only create separate chunks for substantive code blocks
-        if (code.trim().length > 50) {
+      // Function to add a chunk, splitting if necessary
+      const addChunk = (content: string, type: 'content' | 'code' | 'table', orderOffset: number, language?: string) => {
+        if (content.length <= MAX_SECTION_CHARS || type !== 'content') {
+          // If content is within limits or not a main content chunk, add it directly
           chunks.push({
-            content: code,
+            content: content,
             metadata: {
               title: metadata.title || 'Untitled Document',
               sectionHeading,
               parentHeading,
               headingLevel,
-              language,
               sectionIndex: index,
-              order: index + (position * 0.1),
-              type: 'code'
+              language: type === 'code' ? language : undefined,
+              order: index + orderOffset,
+              type: type
             }
           });
-          position++;
+        } else {
+          // If content chunk is too large, split it
+          logger.debug(`Content chunk within section "${sectionHeading || 'Untitled Section'}" is too large (${content.length} chars). Splitting.`);
+          
+          const numSubsections = Math.ceil(content.length / MAX_SECTION_CHARS);
+          const subsectionSize = Math.ceil(content.length / numSubsections);
+          
+          for (let i = 0; i < numSubsections; i++) {
+            const start = i * subsectionSize;
+            const end = Math.min((i + 1) * subsectionSize, content.length);
+            const subsectionContent = content.substring(start, end);
+            
+            chunks.push({
+              content: subsectionContent,
+              metadata: {
+                title: metadata.title || 'Untitled Document',
+                sectionHeading,
+                parentHeading,
+                headingLevel,
+                sectionIndex: index,
+                subsectionIndex: i, // Mark as a subsection
+                order: index + orderOffset + (i * 0.01), // Keep subsections ordered
+                type: 'content'
+              }
+            });
+          }
+        }
+      };
+
+      // Add the main content chunk(s) for this section
+      addChunk(section.substring(headingMatch ? headingMatch[0].length : 0).trim(), 'content', 0);
+            
+      // Extract code blocks from the section and add them
+      const codeBlockRegex = /```([a-z]*)\\n([\\s\\S]*?)```/g;
+      let match;
+      let position = 0.1; // Start code blocks slightly after main content
+      
+      while ((match = codeBlockRegex.exec(section)) !== null) {
+        const language = match[1] || 'text';
+        const code = match[2];
+        
+        if (code.trim().length > 50) {
+          addChunk(code, 'code', position, language);
+          position += 0.1;
         }
       }
       
       // Process tables separately
-      const tableRegex = /\|[^\n]+\|\n\|(?:[-:]+\|)+\n(\|[^\n]+\|\n)+/g;
-      position = 0;
+      const tableRegex = /\\|[^\\n]+\\|\\n\\|(?:[-:]+\\|)+\\n(\\|[^\\n]+\\|\\n)+/g;
+      // Reset position for tables, starting after code blocks
+      position = Math.ceil(position); 
       
       while ((match = tableRegex.exec(section)) !== null) {
-        chunks.push({
-          content: match[0],
-          metadata: {
-            title: metadata.title || 'Untitled Document',
-            sectionHeading,
-            parentHeading,
-            headingLevel,
-            sectionIndex: index,
-            order: index + (position * 0.1),
-            type: 'table'
-          }
-        });
-        position++;
+         addChunk(match[0], 'table', position);
+         position += 0.1;
       }
     });
     
+    logger.debug(`Created ${chunks.length} chunks from document with title "${metadata.title || 'Untitled'}"`);
     return chunks;
   }
 
