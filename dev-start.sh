@@ -56,6 +56,8 @@ fi
 echo -e "${YELLOW}Running database migrations...${NC}"
 npx prisma migrate deploy
 
+npm run build
+
 echo -e "${GREEN}Development environment is ready!${NC}"
 echo -e "${GREEN}PostgreSQL is running on port 5433${NC}"
 echo -e "${YELLOW}To stop the environment, run: docker-compose -f docker-compose.dev.yml down${NC}" 
