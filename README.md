@@ -10,6 +10,10 @@ A system for crawling, processing, and querying documentation with AI-powered em
 - **Job Management**: Track and manage document processing jobs with detailed progress reporting
 - **MCP Integration**: Built-in MCP tools for AI agent integration
 
+## Roadmap
+- SPA support: currently the crawler doesn't support SPAs
+- Caching: crawled urls are directly added to the DB
+
 ## Getting Started (Development Setup)
 
 ### Prerequisites
