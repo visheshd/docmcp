@@ -1,6 +1,6 @@
-# DocMCP: Documentation Management and Processing System
+# DocMCP: Index the latest doc for LLMs on PostgreSQL using pgvector and expose to AI IDEs
 
-A powerful system for crawling, processing, and querying documentation with AI-powered embedding generation and semantic search capabilities.
+A system for crawling, processing, and querying documentation with AI-powered embedding generation and semantic search capabilities.
 
 ## Features
 
@@ -9,58 +9,6 @@ A powerful system for crawling, processing, and querying documentation with AI-p
 - **Vector Embeddings**: Generate embeddings using AWS Bedrock for semantic searching
 - **Job Management**: Track and manage document processing jobs with detailed progress reporting
 - **MCP Integration**: Built-in MCP tools for AI agent integration
-- **RESTful API**: Simple API endpoints for integration with other systems
-
-## Architecture
-
-The system consists of several core services:
-
-- **CrawlerService**: Handles documentation site crawling with robots.txt support
-- **DocumentProcessorService**: Processes documents (HTML→Markdown, chunking, embedding)
-- **JobService**: Manages asynchronous processing jobs with detailed status tracking
-- **ChunkService**: Stores and retrieves document chunks with vector search capabilities
-- **MCP Tools**: Agent-friendly interface for adding and querying documentation
-
-### Document Processing Pipeline
-
-The DocMCP system processes documentation through the following pipeline:
-
-1. **Documentation Input**
-   - User provides a URL through the `add_documentation` MCP tool
-   - System creates a Job record with "pending" status
-   - Job is assigned tags for categorization and future filtering
-
-2. **Web Crawling** (CrawlerService)
-   - Crawler respects robots.txt restrictions
-   - Follows links up to specified maximum depth
-   - Captures HTML content and metadata
-   - Creates Document records linked to the parent Job
-
-3. **Document Processing** (DocumentProcessorService)
-   - Cleans HTML and converts to structured Markdown
-   - Extracts metadata (package info, version, document type)
-   - Establishes parent-child relationships between documents
-   - Updates Job progress as processing continues
-
-4. **Chunking & Embedding** (ChunkService)
-   - Splits documents into semantic chunks for better retrieval
-   - Generates vector embeddings using AWS Bedrock
-   - Stores embeddings in PostgreSQL with pgvector extension
-   - Preserves chunk metadata and document references
-
-5. **Job Finalization** (JobService)
-   - Updates Job status to "completed"
-   - Calculates and stores document statistics
-   - Makes documents available for querying
-
-6. **Querying & Retrieval**
-   - User sends query through `query_documentation` MCP tool
-   - System converts query to vector embedding
-   - Performs similarity search to find relevant chunks
-   - Returns formatted results with source information
-   - Supports filtering by tags, status, and metadata
-
-This pipeline enables efficient storage, processing, and retrieval of documentation with semantic understanding capabilities. All steps are tracked through the job system, allowing detailed progress monitoring and error handling.
 
 ## Getting Started (Development Setup)
 
@@ -174,9 +122,56 @@ For example, if DocMCP is installed in `/home/user/projects/docmcp`, your config
 
 After adding this configuration, restart Cursor for the changes to take effect.
 
-## Usage
+## Architecture
 
+The system consists of several core services:
 
+- **CrawlerService**: Handles documentation site crawling with robots.txt support
+- **DocumentProcessorService**: Processes documents (HTML→Markdown, chunking, embedding)
+- **JobService**: Manages asynchronous processing jobs with detailed status tracking
+- **ChunkService**: Stores and retrieves document chunks with vector search capabilities
+- **MCP Tools**: Agent-friendly interface for adding and querying documentation
+
+### Document Processing Pipeline
+
+The DocMCP system processes documentation through the following pipeline:
+
+1. **Documentation Input**
+   - User provides a URL through the `add_documentation` MCP tool
+   - System creates a Job record with "pending" status
+   - Job is assigned tags for categorization and future filtering
+
+2. **Web Crawling** (CrawlerService)
+   - Crawler respects robots.txt restrictions
+   - Follows links up to specified maximum depth
+   - Captures HTML content and metadata
+   - Creates Document records linked to the parent Job
+
+3. **Document Processing** (DocumentProcessorService)
+   - Cleans HTML and converts to structured Markdown
+   - Extracts metadata (package info, version, document type)
+   - Establishes parent-child relationships between documents
+   - Updates Job progress as processing continues
+
+4. **Chunking & Embedding** (ChunkService)
+   - Splits documents into semantic chunks for better retrieval
+   - Generates vector embeddings using AWS Bedrock
+   - Stores embeddings in PostgreSQL with pgvector extension
+   - Preserves chunk metadata and document references
+
+5. **Job Finalization** (JobService)
+   - Updates Job status to "completed"
+   - Calculates and stores document statistics
+   - Makes documents available for querying
+
+6. **Querying & Retrieval**
+   - User sends query through `query_documentation` MCP tool
+   - System converts query to vector embedding
+   - Performs similarity search to find relevant chunks
+   - Returns formatted results with source information
+   - Supports filtering by tags, status, and metadata
+
+This pipeline enables efficient storage, processing, and retrieval of documentation with semantic understanding capabilities. All steps are tracked through the job system, allowing detailed progress monitoring and error handling.
 
 ## Project Structure
 
