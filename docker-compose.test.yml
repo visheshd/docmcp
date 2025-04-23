@@ -1,0 +1,30 @@
+version: '3.8'
+services:
+  postgres:
+    container_name: docmcp-postgres-test  # Explicit test container name
+    image: ankane/pgvector:latest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: docmcp
+    ports:
+      - "5434:5432"  # Using port 5434 instead of 5433 for testing
+    volumes:
+      - postgres_data_test:/var/lib/postgresql/data  # Different volume name
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: "no"  # Changed to "no" for testing purposes
+
+volumes:
+  postgres_data_test:  # Different volume name
+    driver: local 

@@ -23,7 +23,7 @@ const server = new McpServer({
 
 // Query documentation tool
 server.tool(
-  "docs",
+  "docmcp",
   "Query the knowledge base for relevant documentation",
   queryDocumentationSchema,
   queryDocumentationHandler
