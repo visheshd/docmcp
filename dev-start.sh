@@ -56,10 +56,6 @@ fi
 echo -e "${YELLOW}Running database migrations...${NC}"
 npx prisma migrate deploy
 
-# Import seed data
-echo -e "${YELLOW}Importing seed data...${NC}"
-docker exec -i $CONTAINER_NAME psql -U postgres -d docmcp < seed/backup_2025-04-23T09-15-41-150Z.sql
-
 echo -e "${GREEN}Development environment is ready!${NC}"
 echo -e "${GREEN}PostgreSQL is running on port 5433${NC}"
 echo -e "${YELLOW}To stop the environment, run: docker-compose -f docker-compose.dev.yml down${NC}" 
