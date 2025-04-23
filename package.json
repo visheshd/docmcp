@@ -16,7 +16,9 @@
     "test:ci": "jest --ci --coverage --maxWorkers=2",
     "add-docs": "node dist/scripts/add-docs.js",
     "process-docs": "node dist/scripts/process-docs.js",
-    "test:chunking": "ts-node scripts/test-chunking.ts"
+    "test:chunking": "ts-node scripts/test-chunking.ts",
+    "db:backup": "node -r dotenv/config ./scripts/backup-db.js",
+    "db:restore": "node -r dotenv/config ./scripts/restore-db.js"
   },
   "keywords": [
     "mcp",
