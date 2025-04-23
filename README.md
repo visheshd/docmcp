@@ -6,7 +6,7 @@ A powerful system for crawling, processing, and querying documentation with AI-p
 
 - **Documentation Crawling**: Automatically crawl documentation sites with customizable depth and rate limiting
 - **Content Processing**: Convert HTML to clean Markdown with metadata extraction
-- **Vector Embeddings**: Generate embeddings using Ollama API for semantic searching
+- **Vector Embeddings**: Generate embeddings using AWS Bedrock for semantic searching
 - **Job Management**: Track and manage document processing jobs with detailed progress reporting
 - **MCP Integration**: Built-in MCP tools for AI agent integration
 - **RESTful API**: Simple API endpoints for integration with other systems
@@ -44,7 +44,7 @@ The DocMCP system processes documentation through the following pipeline:
 
 4. **Chunking & Embedding** (ChunkService)
    - Splits documents into semantic chunks for better retrieval
-   - Generates vector embeddings for each chunk
+   - Generates vector embeddings using AWS Bedrock
    - Stores embeddings in PostgreSQL with pgvector extension
    - Preserves chunk metadata and document references
 
@@ -62,22 +62,22 @@ The DocMCP system processes documentation through the following pipeline:
 
 This pipeline enables efficient storage, processing, and retrieval of documentation with semantic understanding capabilities. All steps are tracked through the job system, allowing detailed progress monitoring and error handling.
 
-## Getting Started (Docker Recommended)
+## Getting Started (Development Setup)
 
-Using Docker and Docker Compose is the easiest and recommended way to get DocMCP and its dependencies (PostgreSQL + pgvector) running locally for development and testing with AI agents like Cursor.
-
-### Prerequisites (Docker Setup)
+### Prerequisites
 
 - Docker ([Install Guide](https://docs.docker.com/engine/install/))
 - Docker Compose ([Install Guide](https://docs.docker.com/compose/install/))
+- Node.js 16+
 - Git
-- An accessible Ollama API instance (e.g., running locally on your host machine)
+- AWS Account with Bedrock access
+- AWS CLI configured with appropriate credentials
 
-### Quick Start Steps (Docker)
+### Quick Start Steps
 
 1.  **Clone the Repository:**
     ```bash
-    git clone https://github.com/yourusername/docmcp.git
+    git clone https://github.com/visheshd/docmcp.git
     cd docmcp
     ```
 
@@ -87,38 +87,92 @@ Using Docker and Docker Compose is the easiest and recommended way to get DocMCP
         cp .env.example .env
         ```
     *   **Edit the `.env` file:**
-        *   Verify `DATABASE_URL`. The default usually works with the included Docker Compose PostgreSQL service.
-        *   **Crucially, set `OLLAMA_API_URL`** to the URL of your running Ollama instance. If Ollama is running on your host machine, you might use `http://host.docker.internal:11434` (on Docker Desktop for Mac/Windows) or the host's IP address. Ensure this URL is accessible *from within the Docker container*.
-        *   Adjust other settings like `LOG_LEVEL` if needed.
+        *   Set `DATABASE_URL` to `postgresql://postgres:postgres@localhost:5433/docmcp`
+        *   **Configure AWS Bedrock:**
+            *   Set `AWS_REGION` to your AWS region (e.g., `us-east-1`)
+            *   Set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` with your AWS credentials
+            *   Or ensure your AWS CLI is configured with appropriate credentials
+        *   Adjust other settings like `LOG_LEVEL` if needed
 
-3.  **Start the Application:**
+3.  **Start the Development Environment:**
     ```bash
-    ./docker-start.sh 
+    # Make the script executable
+    chmod +x dev-start.sh
+    
+    # Start the development environment
+    ./dev-start.sh
     ```
-    This script handles:
-    *   Creating necessary directories.
-    *   Setting file permissions.
-    *   Building the Docker images (if not already built).
-    *   Starting the `app` and `postgres` containers.
-    *   **Automatically applying Prisma database migrations** within the `app` container upon startup.
-    *   Displaying the application's base URL (usually `http://localhost:1337`).
+    This script will:
+    * Start PostgreSQL with pgvector in a Docker container
+    * Install project dependencies
+    * Run database migrations
+    * Import seed data automatically
+    * The database will be accessible on port 5433
 
-4.  **Verify Services:**
-    *   Check Docker Desktop or run `docker ps` to see the `docmcp-app` and `docmcp-postgres` containers running.
-    *   Check logs (`docker-compose logs -f app`) for any startup errors, especially related to database connection or migrations.
-
-5.  **(First Time Setup) Verify Seed Data:**
-    *   DocMCP includes seed data for common packages.
-    *   The `DocumentationMapperService` automatically seeds this data the first time it starts if the database is empty.
-    *   Check application logs (`docker-compose logs -f app`) for seeding messages to confirm.
-    *   This ensures some documentation is available immediately.
-
-6.  **Stop the Application:**
+4.  **Add Documentation:**
+    Use the `add-docs` script to crawl and process documentation:
     ```bash
-    ./docker-stop.sh
+    # Basic usage
+    npm run add-docs -- --url https://example.com/docs --max-depth 3
+
+    # With additional options
+    npm run add-docs -- \
+      --url https://example.com/docs \
+      --max-depth 3 \
+      --tags react,frontend \
+      --package react \
+      --version 18.0.0 \
+      --wait
     ```
 
-Now that the service is running, you can proceed to integrate it with your AI agent (see "Integrating with AI Agents" section below) or explore other features.
+    Available options:
+    - `--url`: Documentation URL to crawl (required)
+    - `--max-depth`: Maximum crawl depth (default: 3)
+    - `--tags`: Comma-separated tags for categorization
+    - `--package`: Package name this documentation is for
+    - `--version`: Package version (defaults to "latest")
+    - `--wait`: Wait for processing to complete
+    - `--verbose`: Enable detailed logging
+    - See `npm run add-docs -- --help` for all options
+
+5.  **Query Documentation:**
+    Once documentation is added, you can query it using the MCP tools. See the "Querying Documentation" section below.
+
+6.  **Stop the Development Environment:**
+    ```bash
+    docker-compose -f docker-compose.dev.yml down
+    ```
+
+This setup provides a lightweight development environment with just the required PostgreSQL database and pre-loaded seed data. For production deployments or if you prefer a fully containerized setup, see the "Production Docker Setup" section below.
+
+## Cursor Setup
+
+To use DocMCP with Cursor IDE, you'll need to configure the MCP transport. Add the following configuration to your Cursor settings:
+
+```json
+{
+    "docmcp-local-stdio": {
+      "transport": "stdio",
+      "command": "node",
+      "args": [
+        "<DOCMCP_DIR>/dist/stdio-server.js"
+      ],
+      "clientInfo": {
+        "name": "cursor-client",
+        "version": "1.0.0"
+      }
+    }
+}
+```
+
+Replace `<DOCMCP_DIR>` with the absolute path to your DocMCP installation directory.
+
+For example, if DocMCP is installed in `/home/user/projects/docmcp`, your configuration would be:
+```json
+"args": ["/home/user/projects/docmcp/dist/stdio-server.js"]
+```
+
+After adding this configuration, restart Cursor for the changes to take effect.
 
 ## Project Structure
 
@@ -154,263 +208,3 @@ docmcp/
 ├── .env                     # Environment variables
 └── package.json             # Project dependencies and scripts
 ```
-
-## Integrating with AI Agents (like Cursor)
-
-Once the DocMCP service is running via Docker (using `./docker-start.sh`), the MCP API endpoint is ready for integration.
-
-**Endpoint:**
-
-*   The default API endpoint exposed by the Docker setup is: `http://localhost:1337/mcp`
-
-**Usage:**
-
-1.  **Start DocMCP:** Ensure the Docker containers are running (`./docker-start.sh`).
-2.  **Verify Ollama Access:** Confirm that your Ollama instance (specified in `.env`) is running and accessible from the DocMCP Docker container. Test this if unsure.
-3.  **Configure Agent:** Configure your AI agent (like Cursor) to use `http://localhost:1337/mcp` as the base URL for accessing DocMCP's tools. 
-    *   In Cursor, this is typically done by editing your `settings.json` file (Command Palette -> "Preferences: Open User Settings (JSON)") and adding an entry under `mcpServers`. 
-    *   See the example configuration below.
-4.  **Use Tools:** The agent can now make POST requests to this endpoint to call the available MCP tools (e.g., `add_documentation`, `query_documentation`, `list_documentation`, `get_job_status`) as described below.
-
-**Example Cursor `settings.json` Configuration:**
-
-```json
-{
-  // ... other settings ...
-  "mcpServers": {
-    "docmcp-local": { // You can change "docmcp-local" to any name you prefer
-      "url": "http://localhost:1337/mcp" // Use the correct endpoint
-      // "env": {} // env block is likely not needed for this server
-    }
-    // ... potentially other MCP servers ...
-  }
-  // ... other settings ...
-}
-```
-
-**Note:** If your agent is running outside the Docker network, `localhost` should work if the agent is on the same host machine. If the agent is elsewhere, use the host machine's IP address and ensure firewalls permit access to port 1337.
-
-## Adding Documentation
-
-Add documentation by providing a URL:
-
-```bash
-curl -X POST http://localhost:1337/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"function": "add_documentation", "parameters": {"url": "https://example.com/docs", "maxDepth": 3}}'
-```
-
-### Separate Processing Step (Optional)
-
-If you need to separate the crawling and processing steps, you can:
-
-1. First crawl the documentation:
-```bash
-npm run add-docs -- --url https://example.com/docs --max-depth 3
-```
-
-2. Then process the documents separately using the job ID from the previous step:
-```bash
-npm run process-docs -- --job-id 7f6f9574-ad9c-4307-94b3-226c2047144b --wait
-```
-
-This is useful when:
-- You want to verify the crawled content before processing
-- You need to retry only the processing step after a failure
-- You're customizing the processing pipeline
-
-## Querying Documentation
-
-Query your documentation using natural language:
-
-```bash
-curl -X POST http://localhost:1337/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"function": "query_documentation", "parameters": {"query": "How do I authenticate users?"}}'
-```
-
-## Listing Documentation
-
-List available documentation with filtering options:
-
-```bash
-curl -X POST http://localhost:1337/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"function": "list_documentation", "parameters": {"tags": ["react"], "status": "completed", "page": 1, "pageSize": 10}}'
-```
-
-## Available MCP Tools
-
-The system provides the following MCP tools for integration with AI agents and external systems:
-
-| Tool Name | Description | Example Parameters |
-|-----------|-------------|-------------------|
-| `add_documentation` | Add documentation from a URL for crawling and processing | `{"url": "https://example.com/docs", "maxDepth": 3, "tags": ["react"]}` |
-| `list_documentation` | List available documentation with filtering options | `{"tags": ["react"], "status": "completed", "page": 1, "pageSize": 10}` |
-| `query_documentation` | Search documentation using semantic vectors | `{"query": "How to authenticate users?", "maxResults": 5}` |
-| `get_job_status` | Check the status of a documentation processing job | `{"jobId": "550e8400-e29b-41d4-a716-446655440000"}` |
-
-All tools are accessible through the MCP endpoint at `POST /mcp` with the following format:
-
-```json
-{
-  "function": "tool_name",
-  "parameters": {
-    // Tool-specific parameters
-  }
-}
-```
-
-## Context-Aware Documentation Queries
-
-The `query_documentation` MCP tool offers enhanced functionality by incorporating code context to deliver more relevant and targeted documentation results.
-
-### How It Works
-
-1.  **Context Input:** The tool accepts an optional `context` parameter containing a code snippet (e.g., the code currently being edited).
-2.  **Analysis:** The backend `CodeContextService` parses this snippet using utilities in `src/utils/code-parser.ts` to:
-    *   Detect imported packages/libraries (e.g., `react`, `prisma`).
-    *   Identify key identifiers (function names, class names) within the code.
-3.  **Mapping & Enhancement:**
-    *   It looks up potentially relevant documentation associated with the detected packages using the `DocumentationMapperService`.
-    *   It may generate an "enhanced query" string that refines the original user query with terms related to the detected packages and identifiers.
-4.  **Search & Boosting:**
-    *   The system performs a semantic search using the (potentially enhanced) query embedding generated via Ollama.
-    *   Search results (chunks) originating from documents deemed relevant by the context analysis receive a relevance score boost.
-5.  **Output:** The tool returns:
-    *   Standard documentation results, sorted by relevance (incorporating context boost).
-    *   A `summary` section detailing the context analysis performed (detected packages, if the query was enhanced).
-    *   Potentially, direct `packageSuggestions` for documentation specifically related to the detected packages.
-
-### Using the Feature
-
-To leverage context-awareness when calling the `query_documentation` MCP tool:
-
-*   Provide the relevant code snippet as a string in the `context` parameter.
-*   The system will automatically attempt package detection and query enhancement.
-*   You can still use the `package` parameter to *force* filtering by a specific package if needed, overriding the context-based filter.
-
-Example MCP Call:
-
-```json
-{
-  "function": "query_documentation",
-  "parameters": {
-    "query": "how to handle async effects",
-    "context": "import React, { useState, useEffect } from 'react';\n\nfunction MyComponent() {\n  const [data, setData] = useState(null);\n  useEffect(() => {\n    async function fetchData() {\n      const response = await fetch('/api/data');\n      const result = await response.json();\n      setData(result);\n    }\n    fetchData();\n  }, []);\n\n  return <div>{data ? JSON.stringify(data) : 'Loading...'}</div>;\n}"
-  }
-}
-```
-
-### Extending the System
-
-Developers can modify or extend the context-aware functionality:
-
-*   **Code Parsing:** Enhance language support or improve parsing accuracy in `src/utils/code-parser.ts`.
-*   **Context Analysis Logic:** Adjust how packages are detected, relevant documents are identified, or how the enhanced query is constructed within `src/services/code-context.service.ts`.
-*   **Relevance Tuning:** Modify the scoring adjustments (e.g., the boost applied for contextually relevant documents) within the `queryDocumentationHandler` in `src/services/mcp-tools/query-documentation.tool.ts`.
-*   **Package Mapping:** Improve the underlying data connecting packages to their documentation via the `DocumentationMapperService` and associated Prisma models.
-
-## Manual Setup (Without Docker - Not Recommended for MCP Usage)
-
-If you prefer not to use Docker, you can run the application manually.
-
-### Prerequisites (Manual Setup)
-
-- Node.js 16+
-- PostgreSQL with pgvector extension (must be installed and running separately)
-- Ollama API accessible for vector embeddings
-
-### Installation Steps (Manual)
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/docmcp.git
-cd docmcp
-
-# Install dependencies
-npm install
-
-# Set up environment variables
-cp .env.example .env
-# EDIT .env with your configuration (DATABASE_URL, OLLAMA_API_URL, etc.)
-
-# Ensure your PostgreSQL + pgvector DB is running and accessible
-# Ensure your Ollama service is running and accessible
-
-# Run database migrations
-npx prisma migrate deploy
-```
-
-### Usage (Manual)
-
-Start the server:
-
-```bash
-npm run dev
-```
-
-Note: The seed data will also attempt to run automatically on the first start with a manual setup if the database is empty.
-
-## Docker Configuration Details 
-
-The Docker setup includes:
-
-- **Application Container**: Node.js application running the DocMCP server
-- **PostgreSQL Container**: Database with pgvector extension for vector operations
-- **Persistent Volumes**: Data is preserved between container restarts
-- **Health Checks**: Automatic monitoring of service health
-- **Environment Variables**: Configured in docker-compose.yml
-
-To customize the configuration, edit the following files:
-
-- `docker-compose.yml`: Container setup and environment variables
-- `.env`: Application configuration (create from .env.example)
-- `Dockerfile`: Application build process
-
-### Accessing Logs
-
-View logs for all services:
-```bash
-docker-compose logs -f
-```
-
-View logs for a specific service:
-```bash
-docker-compose logs -f app
-# or
-docker-compose logs -f postgres
-```
-
-## Job Management Pattern
-
-All services follow a consistent Prisma instance injection pattern:
-
-```typescript
-constructor(prismaClient?: PrismaClient) {
-  this.prisma = prismaClient || getMainPrismaClient();
-}
-```
-
-This pattern enables:
-- Using standard client in normal operation
-- Injecting test database clients during testing
-- Better isolated tests to prevent cross-contamination
-
-## Development
-
-### Build
-
-```bash
-npm run build
-```
-
-### Testing
-
-```bash
-npm test
-```
-
-## License
-
-MIT
