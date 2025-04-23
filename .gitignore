@@ -4,6 +4,7 @@ node_modules/
 
 #jest
 coverage/
+seed/
 
 
 # Build output
