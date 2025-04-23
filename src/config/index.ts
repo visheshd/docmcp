@@ -48,8 +48,10 @@ const config = {
     fixedChunkSize: Number(process.env.FIXED_CHUNK_SIZE) || 1000, // Characters
     fixedChunkOverlap: Number(process.env.FIXED_CHUNK_OVERLAP) || 100, // Characters
     // Added token-based chunking settings
-    tokenChunkSize: Number(process.env.TOKEN_CHUNK_SIZE) || 7000, // Tokens
-    tokenChunkOverlap: Number(process.env.TOKEN_CHUNK_OVERLAP) || 200, // Tokens
+    tokenChunkSize: Number(process.env.TOKEN_CHUNK_SIZE) || 6000, // Tokens (reduced from 7000)
+    tokenChunkOverlap: Number(process.env.TOKEN_CHUNK_OVERLAP) || 100, // Tokens (reduced from 200)
+    markdownChunkSize: Number(process.env.MARKDOWN_CHUNK_SIZE) || 6000, // Characters (~1500 tokens)
+    markdownChunkOverlap: Number(process.env.MARKDOWN_CHUNK_OVERLAP) || 200, // Characters
   },
 };
 

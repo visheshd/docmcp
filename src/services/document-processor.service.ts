@@ -12,7 +12,22 @@ import { URL } from 'url'; // Import URL for robust path joining
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { BedrockEmbeddings } from '@langchain/aws';
 import matter from 'gray-matter'; // We'll use gray-matter to parse frontmatter
-import { TokenTextSplitter } from "@langchain/textsplitters"; // Import TokenTextSplitter
+import { MarkdownTextSplitter } from "@langchain/textsplitters"; // Import MarkdownTextSplitter
+
+// Define custom error class at the top level or within the class scope
+class ChunkTooLargeError extends Error {
+  originalError: any;
+  constructor(message: string, originalError?: any) {
+    super(message);
+    this.name = 'ChunkTooLargeError';
+    this.originalError = originalError;
+    // Ensure the prototype chain is set correctly
+    Object.setPrototypeOf(this, ChunkTooLargeError.prototype);
+  }
+}
+
+// Export the custom error if needed elsewhere (optional)
+// export { ChunkTooLargeError };
 
 // Define the metadata structure
 interface MetadataExtracted {
@@ -109,14 +124,17 @@ export class DocumentProcessorService {
         credentials: {
           accessKeyId: awsConfig.accessKeyId,
           secretAccessKey: awsConfig.secretAccessKey
-        }
-      });
+        },
       
+      });
+
       // Initialize Bedrock embeddings with the chosen model
       this.embeddings = new BedrockEmbeddings({
         client: this.bedrockClient,
         model: 'amazon.titan-embed-text-v1', // Default to this model if not specified
       });
+
+      this.embeddings?.client.config.
       
       logger.info('AWS Bedrock embedding client initialized successfully');
     } catch (error) {
@@ -134,26 +152,15 @@ export class DocumentProcessorService {
   async createEmbedding(text: string): Promise<number[]> {
     const maxRetries = 3;
     let retryDelay = 1000; 
-    // Target token limit for pre-truncation (character-based estimate)
-    const MAX_TOKENS_ESTIMATE = 7000; // Keep as a safety net
 
     if (!this.embeddings) {
       throw new Error('AWS Bedrock embedding client not initialized. Check your configuration.');
     }
 
-    const estimatedTokens = Math.ceil(text.length / 3);
+    // const estimatedTokens = Math.ceil(text.length / 3); // Removed estimation logic
     
-    let processedText = text; // Declare processedText outside the if block
+    let processedText = text; // Start with the original text passed in
 
-    // Apply pre-emptive truncation if character count *suggests* exceeding the limit
-    if (estimatedTokens > MAX_TOKENS_ESTIMATE) {
-      logger.warn(`Text length (${text.length} chars, est. ${estimatedTokens} tokens) likely exceeds safety limit (${MAX_TOKENS_ESTIMATE} tokens). Applying pre-emptive truncation.`);
-      // Truncate based on character estimate - Assign to the existing variable
-      processedText = text.substring(0, MAX_TOKENS_ESTIMATE * 3); 
-      logger.debug(`Pre-emptively truncated text from ${text.length} to ${processedText.length} characters.`);
-    } else {
-      // logger.debug(`Text length (${text.length} chars, est. ${estimatedTokens} tokens) is within safety limit (${MAX_TOKENS_ESTIMATE}). No pre-emptive truncation.`);
-    }
 
     // Retry logic remains the same, Bedrock might still reject if actual token count is too high
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -169,39 +176,49 @@ export class DocumentProcessorService {
         
         return result;
       } catch (error: any) {
-        const isTokenLimitError = error.message && 
-          (error.message.includes("Too many input tokens") || 
-           error.message.includes("token limit"));
-        
+        const statusCode = error?.$metadata?.httpStatusCode;
+        // Check specifically for size-related errors (like 400 Bad Request with token messages, or 413 Payload Too Large)
+        const isSizeError = (
+            statusCode === 400 && 
+            error.message && 
+            (error.message.includes("Too many input tokens") || 
+             error.message.includes("token limit") ||
+             error.message.includes("token count") ||
+             error.message.toLowerCase().includes("too large"))
+          ) || statusCode === 413; // Consider 413 as a size error too
+
         logger.warn(`AWS Bedrock embedding request failed (Attempt ${attempt}/${maxRetries})`, {
           errorMessage: error.message,
-          errorCode: error.code,
-          errorType: error.$metadata?.httpStatusCode,
-          isTokenLimitError,
+          statusCode: statusCode,
+          isSizeError: isSizeError, // Log if it's identified as a size error
           textLength: processedText.length,
         });
 
-        // Aggressive truncation retry logic remains useful if Bedrock returns token limit errors
-        if (isTokenLimitError && attempt < maxRetries) {
-           const previousLength = processedText.length;
-           processedText = processedText.substring(0, Math.floor(processedText.length * 0.5));
-           logger.debug(`Token limit exceeded. Aggressively truncating text from ${previousLength} to ${processedText.length} characters for retry.`);
-        } else if (attempt === maxRetries) {
-          logger.error(`AWS Bedrock embedding request failed after ${maxRetries} attempts.`, { 
-            chunkStart: processedText.substring(0, 100) + '...',
-            finalErrorMessage: error.message,
-            finalLength: processedText.length,
-            finalEstimatedTokens: Math.ceil(processedText.length / 3)
-          });
-          throw error; // Final failure
+        // If it's a size error, throw specific error immediately, do not retry here
+        if (isSizeError) {
+           logger.error(`Chunk identified as too large for Bedrock model (HTTP ${statusCode}). Text length: ${processedText.length}. Error: ${error.message}. Triggering re-chunk attempt.`);
+           // Throw the specific error to be caught by the caller
+           throw new ChunkTooLargeError(`Chunk too large for embedding model (HTTP ${statusCode}): ${error.message}`, error);
         }
 
+        // For other potentially transient errors, retry
+        if (attempt === maxRetries) {
+          logger.error(`AWS Bedrock embedding request failed after ${maxRetries} attempts (non-size error).`, { 
+              finalErrorMessage: error.message,
+              // Add other relevant final error details if needed
+          });
+          // Re-throw the original error for final non-size failures
+          throw error; 
+        }
+
+        // Exponential backoff for retries (only for non-size errors)
         const backoffTime = retryDelay * Math.pow(2, attempt - 1);
+        logger.debug(`Retrying embedding request after ${backoffTime}ms delay (non-size error).`);
         await new Promise(resolve => setTimeout(resolve, backoffTime));
       }
     }
-    
-    throw new Error('Embedding generation failed after multiple retries.');
+    // This point should theoretically not be reached due to throws in the loop
+    throw new Error('Embedding generation failed unexpectedly after multiple retries.'); 
   }
 
   /**
@@ -241,7 +258,7 @@ export class DocumentProcessorService {
         tags: frontmatterMetadata.tags || metadata.tags || ['auto-generated']
       };
 
-      // 4. Chunk the resulting Markdown content using TokenTextSplitter
+      // 4. Chunk the resulting Markdown content using MarkdownTextSplitter
       const chunks = await this.chunkDocument(markdownContent.trim(), mergedMetadata); // Now async
       
       // 5. Create embeddings for chunks and store them
@@ -274,30 +291,40 @@ export class DocumentProcessorService {
       return [];
     }
 
-    // --- TokenTextSplitter Configuration ---
-    // Use values from config or provide defaults
-    // Target ~7000 tokens to be safe for Bedrock's 8192 limit
-    const targetTokenChunkSize = config.chunking?.tokenChunkSize ?? 7000; 
-    const targetTokenChunkOverlap = config.chunking?.tokenChunkOverlap ?? 200; 
-    // Encoding for OpenAI/Anthropic/Bedrock Titan Embeddings models
-    const encodingName = 'cl100k_base'; 
+    // --- MarkdownTextSplitter Configuration ---
+    // Use character counts, aiming for logical segments with token size safety
+    // Default chunk size of 1000 characters (~250 tokens) is very conservative
+    const targetCharacterChunkSize = config.chunking?.markdownChunkSize ?? 1000; 
+    const targetCharacterChunkOverlap = config.chunking?.markdownChunkOverlap ?? 100;
 
-    logger.debug(`Using TokenTextSplitter strategy for document "${metadata.title || 'Untitled'}"`, {
-        chunkSize: targetTokenChunkSize,
-        chunkOverlap: targetTokenChunkOverlap,
-        encoding: encodingName
+    // Calculate a more conservative chunk size (approx 6000 tokens max for 8192 limit)
+    // This gives a ~25% safety margin for token count estimation inaccuracies
+    // Average English text has roughly 4 characters per token
+    const maxSafeTokens = 6000;
+    const approxCharsPerToken = 4;
+    const maxSafeChars = maxSafeTokens * approxCharsPerToken;
+    
+    // Use the smaller of the configured size or the max safe size
+    const safeChunkSize = Math.min(targetCharacterChunkSize, maxSafeChars);
+
+    logger.debug(`Using MarkdownTextSplitter strategy for document "${metadata.title || 'Untitled'}"`, {
+        configuredChunkSize: targetCharacterChunkSize,
+        maxSafeChars: maxSafeChars,
+        actualChunkSize: safeChunkSize,
+        chunkOverlap: targetCharacterChunkOverlap,
     });
     
     try {
-      const splitter = new TokenTextSplitter({
-        encodingName: encodingName,
-        chunkSize: targetTokenChunkSize,
-        chunkOverlap: targetTokenChunkOverlap,
+      // Use MarkdownTextSplitter instead
+      const splitter = new MarkdownTextSplitter({
+        // encodingName: encodingName, // Not applicable
+        chunkSize: safeChunkSize,
+        chunkOverlap: targetCharacterChunkOverlap,
       });
 
       const textChunks = await splitter.splitText(markdown);
       
-      logger.info(`Split document "${metadata.title || 'Untitled'}" into ${textChunks.length} chunks using token count.`);
+      logger.info(`Split document "${metadata.title || 'Untitled'}" into ${textChunks.length} chunks using Markdown structure.`);
 
       // Map the text chunks to our DocumentChunk structure
       const documentChunks: DocumentChunk[] = textChunks.map((text, index) => ({
@@ -315,118 +342,181 @@ export class DocumentProcessorService {
       return documentChunks;
 
     } catch (error) {
-       logger.error(`Error splitting document "${metadata.title || 'Untitled'}" by tokens:`, error);
+       logger.error(`Error splitting document "${metadata.title || 'Untitled'}" by Markdown structure:`, error);
        // Fallback or throw error? Let's throw for now.
-       throw new Error(`Failed to split document by tokens: ${error instanceof Error ? error.message : String(error)}`);
+       throw new Error(`Failed to split document by Markdown structure: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   /**
-   * Create embeddings for document chunks and store them in the database
-   * @param chunks The document chunks to create embeddings for
+   * Create embeddings for document chunks and store them in the database.
+   * Handles re-chunking if a chunk is too large for the embedding model.
+   * @param chunks The initial document chunks to create embeddings for
    * @param documentId The ID of the parent document
    */
   private async createChunkEmbeddings(chunks: DocumentChunk[], documentId: string): Promise<void> {
-    try {
-      // Skip embedding creation if no chunks
+    // Main try block for the entire function
+    try { 
       if (!chunks || chunks.length === 0) {
         logger.info(`No chunks provided for document ${documentId}. Skipping embedding generation.`);
         return;
       }
-
-      // Check if AWS Bedrock is initialized
       if (!this.embeddings) {
-        // Log warning instead of throwing error if embeddings are optional
         logger.warn(`AWS Bedrock embedding client not initialized. Skipping embedding generation for document ${documentId}. Check your configuration.`);
         return;
-        // throw new Error('AWS Bedrock embedding client not initialized. Check your configuration.');
       }
 
-      // Process chunks in batches
-      const batchSize = 5; // Smaller batch size to avoid rate limits
-      const chunksWithEmbeddings = [];
-      let successCount = 0;
-      let errorCount = 0;
+      const finalChunksToSave: Array<{ documentId: string; content: string; embedding: number[]; metadata: any }> = [];
+      let initialSuccessCount = 0;
+      let initialErrorCount = 0;
+      let rechunkAttemptCount = 0;
+      let subChunkSuccessCount = 0;
+      let subChunkErrorCount = 0;
 
-      logger.info(`Starting embedding generation for ${chunks.length} chunks from document ${documentId}`);
+      logger.info(`Starting embedding generation for ${chunks.length} initial chunks from document ${documentId}`);
 
-      for (let i = 0; i < chunks.length; i += batchSize) {
-        const batchChunks = chunks.slice(i, i + batchSize);
-        // Process each chunk sequentially to avoid overwhelming the API
-        for (const chunk of batchChunks) {
-          // Ensure chunk content is valid before attempting embedding
-          if (!chunk.content || typeof chunk.content !== 'string' || chunk.content.trim().length === 0) {
-            logger.warn(`Skipping empty or invalid chunk (order: ${chunk.metadata.order}) for document ${documentId}`);
-            continue; // Skip this chunk
-          }
-          
+      // Iterate directly over all chunks sequentially
+      for (const chunk of chunks) { 
+           if (!chunk.content || typeof chunk.content !== 'string' || chunk.content.trim().length === 0) {
+             logger.warn(`Skipping empty or invalid initial chunk (order: ${chunk.metadata.order}) for document ${documentId}`);
+             continue; 
+           }
+
           try {
-            // Add a small delay between requests to avoid rate limiting
-            if (i > 0 || batchChunks.indexOf(chunk) > 0) {
-              await new Promise(resolve => setTimeout(resolve, 200));
+            // --- Attempt to embed the original chunk ---
+            logger.debug(`Attempting embedding for initial chunk ${initialSuccessCount + initialErrorCount + 1}/${chunks.length} (order: ${chunk.metadata.order})`);
+            // Add delay between individual requests except the very first one
+            if (initialSuccessCount + initialErrorCount + rechunkAttemptCount > 0) { // Delay if not the first attempt overall
+                await new Promise(resolve => setTimeout(resolve, 200)); // 200ms delay
             }
             
-            logger.debug(`Generating embedding for chunk ${successCount + errorCount + 1}/${chunks.length} (order: ${chunk.metadata.order}) from document ${documentId}`);
             const embedding = await this.createEmbedding(chunk.content);
             
-            chunksWithEmbeddings.push({
-              documentId, // Add documentId here for createManyChunks
+            finalChunksToSave.push({
+              documentId, 
               content: chunk.content,
               embedding: embedding,
-              metadata: chunk.metadata
+              metadata: chunk.metadata // Keep original metadata
             });
-            
-            successCount++;
-          } catch (error: any) {
-            errorCount++;
-            // Provide detailed error information to help diagnose issues
-            logger.error(`Failed to generate embedding for chunk (order: ${chunk.metadata.order}) in document ${documentId}, skipping chunk.`, { 
-              chunkContentStart: chunk.content.substring(0, 100) + '...',
-              chunkContentLength: chunk.content.length,
-              chunkType: chunk.metadata.type,
-              errorMessage: error.message,
-              errorCode: error.code,
-              errorType: error.$metadata?.httpStatusCode
-            });
-            
-            // If too many consecutive errors, consider backing off
-            if (errorCount > 5 && errorCount === (successCount + errorCount)) { // Check if *all* attempts so far failed
-              logger.warn(`Encountered ${errorCount} consecutive embedding errors. Adding longer backoff delay.`);
-              await new Promise(resolve => setTimeout(resolve, 2000)); // 2-second backoff
+            initialSuccessCount++;
+
+          } catch (error) {
+            // --- Handle errors, including potential re-chunking ---
+            if (error instanceof ChunkTooLargeError) {
+              initialErrorCount++; // Count the initial failure
+              rechunkAttemptCount++;
+              logger.warn(`Initial chunk (order: ${chunk.metadata.order}) too large. Attempting to re-chunk.`);
+
+              // --- Re-chunking Logic ---
+              try {
+                // Define smaller chunk parameters based on the CHARACTER size
+                 const targetCharacterChunkSize = config.chunking?.markdownChunkSize ?? 1500; // Get the primary character size
+                 
+                 // Be much more aggressive with sub-chunk sizing - approximately 1/4 the size
+                 // For 8,192 token limit with ~4 chars per token, aim for ~5,000 tokens max
+                 const approxCharsPerToken = 4;
+                 const maxTokensForSubChunk = 4000; // Even more conservative (5000 -> 4000)
+                 const maxCharsForSubChunk = maxTokensForSubChunk * approxCharsPerToken;
+                 
+                 // Take the smaller of calculated size or 1/5 of original config (instead of 1/4)
+                 const subChunkSize = Math.min(
+                   maxCharsForSubChunk, 
+                   Math.floor(targetCharacterChunkSize / 5)
+                 );
+                 
+                 // Use minimal overlap for sub-chunks to avoid token waste
+                 const subChunkOverlap = Math.min(100, Math.floor(subChunkSize * 0.05)); // 5% overlap, max 100 chars
+
+                 logger.debug(`Re-chunking with parameters: size=${subChunkSize}, overlap=${subChunkOverlap}, original chunk size=${chunk.content.length} chars`);
+                 
+                 const subSplitter = new MarkdownTextSplitter({
+                   chunkSize: subChunkSize,
+                   chunkOverlap: subChunkOverlap,
+                 });
+
+                 const subTextChunks = await subSplitter.splitText(chunk.content); // Split the *original* large chunk content
+                 logger.info(`Re-split large chunk (order: ${chunk.metadata.order}) into ${subTextChunks.length} sub-chunks.`);
+
+                 // Attempt to embed each sub-chunk
+                 for (let subIndex = 0; subIndex < subTextChunks.length; subIndex++) {
+                    const subText = subTextChunks[subIndex];
+                    if (!subText || subText.trim().length === 0) continue; // Skip empty sub-chunks
+
+                    try {
+                        logger.debug(`Attempting embedding for sub-chunk ${subIndex + 1}/${subTextChunks.length} (from original order: ${chunk.metadata.order})`);
+                        // Add delay between sub-chunk attempts
+                        if (subIndex > 0) {
+                            await new Promise(resolve => setTimeout(resolve, 100)); // Smaller delay
+                        }
+                        const subEmbedding = await this.createEmbedding(subText); // Call createEmbedding again
+
+                        // Adjust metadata for the sub-chunk
+                        const subMetadata = {
+                          ...chunk.metadata, // Copy original metadata
+                          order: parseFloat(`${chunk.metadata.order}.${subIndex + 1}`), // Append sub-index to order
+                          subChunkIndex: subIndex, // Add sub-chunk index
+                          originalChunkOrder: chunk.metadata.order, // Reference original order
+                          // Remove potentially confusing fields inherited from parent chunk?
+                          // start: undefined, // Character indices are not applicable
+                          // end: undefined,
+                          chunkIndex: undefined // Main chunkIndex doesn't apply here
+                        };
+                        
+                        finalChunksToSave.push({
+                           documentId,
+                           content: subText,
+                           embedding: subEmbedding,
+                           metadata: subMetadata
+                        });
+                        subChunkSuccessCount++;
+                    } catch (subError: any) {
+                       subChunkErrorCount++;
+                       logger.error(`Failed to embed sub-chunk ${subIndex + 1}/${subTextChunks.length} (from original order: ${chunk.metadata.order}): ${subError.message}`, { subTextStart: subText.substring(0,50)+'...'});
+                       // Decide if failure of a sub-chunk is critical. For now, just log and continue.
+                    }
+                 } // End of sub-chunk loop
+              } catch (rechunkError) {
+                 // Error during the re-chunking process itself (e.g., splitter error)
+                 logger.error(`Failed to re-chunk original chunk (order: ${chunk.metadata.order}): ${rechunkError}`);
+                 // Original chunk failed, and re-chunking also failed.
+              }
+              // --- End Re-chunking Logic ---
+
+            } else {
+              // Handle other errors from createEmbedding (non-size related)
+              initialErrorCount++;
+              logger.error(`Failed to generate embedding for initial chunk (order: ${chunk.metadata.order}) due to non-size error: ${error instanceof Error ? error.message : String(error)}`);
+              // Optional: Implement backoff here if needed for consecutive non-size errors
             }
-          }
-        }
+          } // End of main try-catch for the chunk
+      } // End of loop iterating directly over chunks
+
+      // --- Final Save --- (Ensure this is inside the main try block)
+      if (finalChunksToSave.length > 0) {
+        // Sort by potentially modified order just in case
+        finalChunksToSave.sort((a: any, b: any) => a.metadata.order - b.metadata.order); // Added types for clarity
         
-        // Add a small delay between batches to avoid overwhelming the API
-        if (i + batchSize < chunks.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
-
-      // Store chunks that successfully received embeddings
-      if (chunksWithEmbeddings.length > 0) {
-        // Pass the array directly as it now contains the required structure
-        await this.chunkService.createManyChunks(chunksWithEmbeddings, documentId); 
-        logger.info(`Successfully created ${chunksWithEmbeddings.length}/${chunks.length - errorCount} chunk embeddings for document ${documentId}`);
-      } else if (errorCount < chunks.length) {
-         logger.warn(`No chunk embeddings were successfully generated for document ${documentId}, although ${chunks.length - errorCount} chunks were processed.`);
+        await this.chunkService.createManyChunks(finalChunksToSave, documentId); 
+        logger.info(`Saved ${finalChunksToSave.length} final chunks for document ${documentId}.`);
       } else {
-         logger.error(`All ${chunks.length} embedding attempts failed for document ${documentId}.`);
+         logger.warn(`No chunks were successfully embedded and saved for document ${documentId}.`);
       }
 
-      // Log embedding statistics
-      logger.info(`Embedding generation complete for document ${documentId}: ${successCount} successful, ${errorCount} failed`);
+      // --- Final Logging --- (Ensure this is inside the main try block)
+      logger.info(`Embedding generation complete for document ${documentId}:`);
+      logger.info(`  Initial Chunks: ${chunks.length} total, ${initialSuccessCount} succeeded, ${initialErrorCount} failed.`);
+      if (rechunkAttemptCount > 0) {
+           logger.info(`  Re-chunking Attempts: ${rechunkAttemptCount} large chunks triggered re-chunking.`);
+           logger.info(`    Sub-Chunks Created: ${subChunkSuccessCount + subChunkErrorCount} total sub-chunks processed.`);
+           logger.info(`    Sub-Chunks Succeeded: ${subChunkSuccessCount} successfully embedded.`);
+           logger.info(`    Sub-Chunks Failed: ${subChunkErrorCount} failed embedding.`);
+      }
+      logger.info(`  Total chunks saved to DB: ${finalChunksToSave.length}`);
 
-    } catch (error: any) {
-      // Catch errors from the overall process
-      logger.error(`Error processing chunk embeddings for document ${documentId}:`, {
-        error: error.message,
-        stack: error.stack,
-        chunksCount: chunks.length
-      });
-      // Decide if this error should stop the overall document processing
-      // For now, re-throw, but maybe log and continue if embeddings are non-critical
-      throw error; 
+    // Main catch block for the entire function
+    } catch (error: any) { 
+      logger.error(`Error creating embeddings for document ${documentId}:`, error);
+      throw error; // Re-throw critical errors
     }
   }
 }

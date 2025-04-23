@@ -15,7 +15,8 @@
     "test:coverage": "jest --coverage",
     "test:ci": "jest --ci --coverage --maxWorkers=2",
     "add-docs": "node dist/scripts/add-docs.js",
-    "process-docs": "node dist/scripts/process-docs.js"
+    "process-docs": "node dist/scripts/process-docs.js",
+    "test:chunking": "ts-node scripts/test-chunking.ts"
   },
   "keywords": [
     "mcp",
