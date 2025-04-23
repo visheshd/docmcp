@@ -8,6 +8,7 @@ import { DocumentService } from './document.service';
 import { getPrismaClient as getMainPrismaClient } from '../config/database';
 import robotsParser from 'robots-parser';
 import { LinkExtractor } from '../utils/link-extractor';
+import { PackageMetadata } from './document.service';
 
 interface CrawlOptions {
   maxDepth: number;
@@ -177,6 +178,9 @@ export class CrawlerService {
           this.pagesProcessed++;
 
           // Create document record, including the jobId
+          const jobPackageInfo = await this.extractPackageInfoFromJob(jobId);
+          const documentPackageInfo = jobPackageInfo;
+
           await this.documentService.createDocument({
             url: result.url,
             title: result.title,
@@ -185,6 +189,7 @@ export class CrawlerService {
             crawlDate: new Date(),
             level: result.level,
             jobId: jobId,
+            packageInfo: documentPackageInfo,
           });
 
           // Queue new URLs
@@ -493,13 +498,17 @@ export class CrawlerService {
     // Extract links using the LinkExtractor utility
     const extractedLinks = LinkExtractor.extractAllLinks(response.data, options.baseUrl, url);
 
+    // Detect package information from URL and content
+    const detectedPackageInfo = this.detectPackageInfoFromContent(url, $);
+
     // Extract metadata
-    // This is a basic implementation - you might need to adjust based on the site structure
     const metadata = {
-      package: $('meta[name="package"]').attr('content'),
-      version: $('meta[name="version"]').attr('content'),
+      package: $('meta[name="package"]').attr('content') || detectedPackageInfo?.packageName,
+      version: $('meta[name="version"]').attr('content') || detectedPackageInfo?.packageVersion,
       type: 'documentation',
       tags: ['auto-generated'],
+      // Store the full package info for document creation
+      detectedPackageInfo: detectedPackageInfo,
     };
 
     return {
@@ -560,6 +569,151 @@ export class CrawlerService {
     } catch (error) {
       logger.error(`Error checking for existing document for ${url}:`, error);
       return null; // Proceed with normal crawl if DB check fails
+    }
+  }
+
+  /**
+   * Extract package information from job metadata
+   * @param jobId The ID of the job
+   * @returns Package metadata if available
+   */
+  private async extractPackageInfoFromJob(jobId: string): Promise<PackageMetadata | undefined> {
+    try {
+      const job = await this.prisma.job.findUnique({
+        where: { id: jobId },
+        select: { metadata: true }
+      });
+
+      if (!job?.metadata || typeof job.metadata !== 'object') {
+        return undefined;
+      }
+
+      const metadata = job.metadata as Record<string, any>;
+      
+      // Only return package info if packageName is provided
+      if (metadata.packageName) {
+        return {
+          packageName: metadata.packageName,
+          packageVersion: metadata.packageVersion || 'latest',
+          language: metadata.language || 'javascript',
+          sourceName: metadata.sourceName || 'Job Metadata',
+          sourceIsOfficial: metadata.sourceIsOfficial === true,
+          relevanceScore: 0.9 // High relevance for explicitly provided package info
+        };
+      }
+      
+      return undefined;
+    } catch (error) {
+      logger.warn(`Error extracting package info from job ${jobId}:`, error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Detect package information from URL patterns and HTML content
+   * @param url URL of the page
+   * @param $cheerio The cheerio instance with loaded HTML
+   * @returns Detected package metadata if available
+   */
+  private detectPackageInfoFromContent(url: string, $: any): PackageMetadata | undefined {
+    // First check for explicit metadata in HTML
+    const metaPackage = $('meta[name="package"]').attr('content');
+    const metaVersion = $('meta[name="version"]').attr('content');
+    
+    // Initialize metadata object
+    const packageInfo: Partial<PackageMetadata> = {};
+    
+    // If meta tags provide package info, use it
+    if (metaPackage) {
+      packageInfo.packageName = metaPackage;
+      if (metaVersion) {
+        packageInfo.packageVersion = metaVersion;
+      }
+      packageInfo.sourceName = 'HTML Metadata';
+      packageInfo.relevanceScore = 0.85; // High confidence for explicit metadata
+      return packageInfo as PackageMetadata;
+    }
+    
+    // Otherwise, try to infer from URL
+    try {
+      const urlObj = new URL(url);
+      const hostname = urlObj.hostname;
+      const pathname = urlObj.pathname;
+      
+      // Check common documentation sites
+      
+      // NPM
+      if (hostname === 'www.npmjs.com' || hostname === 'npmjs.com') {
+        const pathParts = pathname.split('/').filter(Boolean);
+        if (pathParts[0] === 'package' && pathParts.length > 1) {
+          packageInfo.packageName = pathParts[1];
+          packageInfo.language = 'javascript';
+          packageInfo.sourceName = 'NPM';
+          packageInfo.sourceIsOfficial = true;
+          packageInfo.relevanceScore = 0.8;
+          return packageInfo as PackageMetadata;
+        }
+      }
+      
+      // GitHub
+      if (hostname === 'github.com') {
+        const pathParts = pathname.split('/').filter(Boolean);
+        if (pathParts.length >= 2) {
+          // GitHub URLs are typically github.com/owner/repo
+          const repoName = pathParts[1];
+          packageInfo.packageName = repoName;
+          packageInfo.sourceName = 'GitHub';
+          packageInfo.relevanceScore = 0.6; // Lower confidence since GitHub repositories might not be packages
+          
+          // Look for package.json references in the page content to confirm it's a package
+          if ($('a[href*="package.json"]').length || $('a[href*="setup.py"]').length) {
+            packageInfo.relevanceScore = 0.7; // Higher confidence if package config files are mentioned
+          }
+          
+          return packageInfo as PackageMetadata;
+        }
+      }
+      
+      // PyPI
+      if (hostname === 'pypi.org') {
+        const pathParts = pathname.split('/').filter(Boolean);
+        if (pathParts[0] === 'project' && pathParts.length > 1) {
+          packageInfo.packageName = pathParts[1];
+          packageInfo.language = 'python';
+          packageInfo.sourceName = 'PyPI';
+          packageInfo.sourceIsOfficial = true;
+          packageInfo.relevanceScore = 0.8;
+          return packageInfo as PackageMetadata;
+        }
+      }
+      
+      // Package-specific documentation sites
+      const commonPackageSites: Record<string, { name: string, language: string }> = {
+        'reactjs.org': { name: 'react', language: 'javascript' },
+        'react.dev': { name: 'react', language: 'javascript' },
+        'angular.io': { name: 'angular', language: 'typescript' },
+        'vuejs.org': { name: 'vue', language: 'javascript' },
+        'nextjs.org': { name: 'next', language: 'javascript' },
+        'expressjs.com': { name: 'express', language: 'javascript' },
+        'djangoproject.com': { name: 'django', language: 'python' },
+        'flask.palletsprojects.com': { name: 'flask', language: 'python' },
+      };
+      
+      if (commonPackageSites[hostname]) {
+        const pkgInfo = commonPackageSites[hostname];
+        packageInfo.packageName = pkgInfo.name;
+        packageInfo.language = pkgInfo.language;
+        packageInfo.sourceName = 'Official Website';
+        packageInfo.sourceIsOfficial = true;
+        packageInfo.relevanceScore = 0.9; // High confidence for known official sites
+        return packageInfo as PackageMetadata;
+      }
+      
+      // Unable to detect package
+      return undefined;
+    } catch (error) {
+      logger.warn(`Error detecting package info from ${url}:`, error);
+      return undefined;
     }
   }
 }

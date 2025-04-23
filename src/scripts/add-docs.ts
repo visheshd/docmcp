@@ -23,6 +23,7 @@ import { JobService } from '../services/job.service';
 import { JobStatus, JobType } from '../generated/prisma';
 import { getPrismaClient } from '../config/database';
 import { startCrawlingProcess } from '../services/mcp-tools/add-documentation.tool';
+import inquirer from 'inquirer';
 
 // Define interface for the CLI arguments
 interface CliArgs {
@@ -35,6 +36,9 @@ interface CliArgs {
   wait: boolean;
   verbose: boolean;
   check: boolean;
+  package?: string;
+  version?: string;
+  'skip-prompts': boolean;
   [key: string]: unknown;
 }
 
@@ -117,6 +121,59 @@ async function displayJobProgress(jobId: string, prisma: any): Promise<void> {
 }
 
 /**
+ * Prompt the user for package information if not provided via command line
+ * @param args The parsed command line arguments
+ * @returns Object containing package name and version
+ */
+async function promptForPackageInfo(args: CliArgs): Promise<{ packageName: string; packageVersion: string }> {
+  // Use CLI args if provided
+  if (args.package && args['skip-prompts']) {
+    return {
+      packageName: args.package,
+      packageVersion: args.version || 'latest'
+    };
+  }
+
+  // Define answers interface
+  interface PromptAnswers {
+    packageName?: string;
+    packageVersion?: string;
+  }
+
+  // If we have questions to ask, prompt the user
+  const answers: PromptAnswers = {};
+  
+  // Only ask for package name if not provided via CLI
+  if (!args.package) {
+    const packageNameResponse = await inquirer.prompt<{packageName: string}>({
+      type: 'input',
+      name: 'packageName',
+      message: 'What is the name of the package this documentation is for?',
+      validate: (input: string) => {
+        return input.trim().length > 0 ? true : 'Package name is required';
+      }
+    });
+    answers.packageName = packageNameResponse.packageName;
+  }
+  
+  // Always ask for version if not provided via CLI
+  if (!args.version) {
+    const versionResponse = await inquirer.prompt<{packageVersion: string}>({
+      type: 'input',
+      name: 'packageVersion',
+      message: 'What version of the package is this documentation for? (leave blank for "latest")',
+      default: 'latest'
+    });
+    answers.packageVersion = versionResponse.packageVersion;
+  }
+  
+  return {
+    packageName: args.package || answers.packageName || '',
+    packageVersion: args.version || answers.packageVersion || 'latest'
+  };
+}
+
+/**
  * Main function to parse arguments and execute the documentation addition process
  */
 async function main() {
@@ -171,6 +228,19 @@ async function main() {
       default: false,
       describe: 'Validate arguments without connecting to the database'
     })
+    .option('package', {
+      type: 'string',
+      describe: 'The name of the package this documentation is for'
+    })
+    .option('version', {
+      type: 'string',
+      describe: 'The version of the package this documentation is for (defaults to "latest")'
+    })
+    .option('skip-prompts', {
+      type: 'boolean',
+      default: false,
+      describe: 'Skip interactive prompts and use provided CLI arguments or defaults'
+    })
     .check((argv) => {
       // Validate URL format
       try {
@@ -200,6 +270,18 @@ async function main() {
     const name = argv['name'] || urlObj.hostname;
     const tags = argv.tags || [urlObj.hostname];
     
+    // Get package information - either from CLI args or interactive prompts
+    let packageInfo;
+    if (!argv.check) {
+      packageInfo = await promptForPackageInfo(argv);
+      logger.info(`Package information: ${packageInfo.packageName}@${packageInfo.packageVersion}`);
+    } else {
+      packageInfo = {
+        packageName: argv.package || 'not specified',
+        packageVersion: argv.version || 'latest'
+      };
+    }
+    
     // If in check mode, just validate and exit
     if (argv.check) {
       logger.info('Check mode: Validating arguments without database connection');
@@ -209,6 +291,8 @@ async function main() {
       console.log(`  Max Depth: ${argv['max-depth']}`);
       console.log(`  Name: ${name}`);
       console.log(`  Tags: ${tags.join(', ')}`);
+      console.log(`  Package: ${packageInfo.packageName}`);
+      console.log(`  Package Version: ${packageInfo.packageVersion}`);
       console.log(`  Rate Limit: ${argv['rate-limit']}ms`);
       console.log(`  Respect robots.txt: ${argv['respect-robots-txt']}`);
       console.log(`  Wait for completion: ${argv.wait}`);
@@ -246,11 +330,15 @@ async function main() {
           crawlMaxDepth: argv['max-depth'],
           crawlRateLimit: argv['rate-limit'],
           crawlRespectRobotsTxt: argv['respect-robots-txt'],
+          // Add package information to the metadata
+          packageName: packageInfo.packageName,
+          packageVersion: packageInfo.packageVersion
         }
       });
       
       logger.info(`Job created successfully with ID: ${job.id}`);
       console.log(`Job ID: ${job.id}`);
+      console.log(`Package mapping: ${packageInfo.packageName}@${packageInfo.packageVersion}`);
       
       // Implement core processing logic (Task 11.3)
       if (!argv.wait) {
@@ -262,6 +350,9 @@ async function main() {
           tags: tags,
           rateLimit: argv['rate-limit'],
           respectRobotsTxt: argv['respect-robots-txt'],
+          // Pass package information to the crawling process
+          packageName: packageInfo.packageName,
+          packageVersion: packageInfo.packageVersion
         }).catch(error => {
           logger.error(`Unhandled error in background job ${job.id}:`, error);
         });
@@ -286,6 +377,9 @@ async function main() {
           tags: tags,
           rateLimit: argv['rate-limit'],
           respectRobotsTxt: argv['respect-robots-txt'],
+          // Pass package information to the crawling process
+          packageName: packageInfo.packageName,
+          packageVersion: packageInfo.packageVersion,
           _bypassAsync: true // Run synchronously
         });
         
@@ -315,6 +409,7 @@ async function main() {
               console.log(`Skipped ${jobStats.pagesSkipped || 0} pages`);
             }
             console.log(`\nDocumentation is now available in the knowledge base.`);
+            console.log(`Package mapping created for: ${packageInfo.packageName}@${packageInfo.packageVersion}`);
             process.exit(0);
           } else {
             console.error(`\nJob ended with status: ${finalJob.status}`);

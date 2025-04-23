@@ -31,6 +31,8 @@ type AddDocumentationParams = {
   name?: string;
   tags?: string[];
   rateLimit?: number;
+  packageName?: string;
+  packageVersion?: string;
   respectRobotsTxt?: boolean;
   // Internal params
   _bypassAsync?: boolean;

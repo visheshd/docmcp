@@ -13,6 +13,8 @@ import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { BedrockEmbeddings } from '@langchain/aws';
 import matter from 'gray-matter'; // We'll use gray-matter to parse frontmatter
 import { MarkdownTextSplitter } from "@langchain/textsplitters"; // Import MarkdownTextSplitter
+import { DocumentationMapperService } from './documentation-mapper.service';
+import { PackageMetadata } from './document.service';
 
 // Define custom error class at the top level or within the class scope
 class ChunkTooLargeError extends Error {

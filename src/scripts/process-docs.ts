@@ -23,6 +23,7 @@ import { DocumentService } from '../services/document.service';
 import { DocumentProcessorService } from '../services/document-processor.service';
 import { JobStatus, PrismaClient } from '../generated/prisma';
 import { getPrismaClient } from '../config/database';
+import inquirer from 'inquirer';
 
 // Define interface for the CLI arguments
 interface CliArgs {
@@ -30,7 +31,17 @@ interface CliArgs {
   wait: boolean;
   verbose: boolean;
   reprocess: boolean;
+  package?: string;
+  version?: string;
+  'skip-prompts': boolean;
   [key: string]: unknown;
+}
+
+// Define the expected metadata structure
+interface JobMetadata {
+  packageName?: string;
+  packageVersion?: string;
+  // Add other fields as necessary
 }
 
 /**
@@ -156,6 +167,78 @@ async function clearChunksForJob(jobId: string, prisma: PrismaClient): Promise<n
 }
 
 /**
+ * Prompt the user for package information if not provided via command line
+ * @param args The parsed command line arguments
+ * @returns Object containing package name and version
+ */
+async function promptForPackageInfo(args: CliArgs): Promise<{ packageName: string; packageVersion: string }> {
+  // Use CLI args if provided
+  if (args.package && args['skip-prompts']) {
+    return {
+      packageName: args.package,
+      packageVersion: args.version || 'latest'
+    };
+  }
+
+  // Define answers interface
+  interface PromptAnswers {
+    packageName?: string;
+    packageVersion?: string;
+  }
+
+  // If we have questions to ask, prompt the user
+  const answers: PromptAnswers = {};
+  
+  // Only ask for package name if not provided via CLI
+  if (!args.package) {
+    const packageNameResponse = await inquirer.prompt<{packageName: string}>({
+      type: 'input',
+      name: 'packageName',
+      message: 'What is the name of the package this documentation is for?',
+      validate: (input: string) => {
+        return input.trim().length > 0 ? true : 'Package name is required';
+      }
+    });
+    answers.packageName = packageNameResponse.packageName;
+  }
+  
+  // Always ask for version if not provided via CLI
+  if (!args.version) {
+    const versionResponse = await inquirer.prompt<{packageVersion: string}>({
+      type: 'input',
+      name: 'packageVersion',
+      message: 'What version of the package is this documentation for? (leave blank for "latest")',
+      default: 'latest'
+    });
+    answers.packageVersion = versionResponse.packageVersion;
+  }
+  
+  return {
+    packageName: args.package || answers.packageName || '',
+    packageVersion: args.version || answers.packageVersion || 'latest'
+  };
+}
+
+/**
+ * Check if job metadata contains package information
+ * @param jobId The ID of the job to check
+ * @param jobService JobService instance
+ * @returns True if package metadata exists, false otherwise
+ */
+async function hasPackageMetadata(jobId: string, jobService: JobService): Promise<boolean> {
+  try {
+    const job = await jobService.findJobById(jobId);
+    if (!job || !job.metadata) return false;
+    
+    const metadata = job.metadata as Record<string, any>;
+    return !!(metadata.packageName && metadata.packageName.trim().length > 0);
+  } catch (error) {
+    logger.error(`Error checking package metadata for job ${jobId}:`, error);
+    return false;
+  }
+}
+
+/**
  * Process all documents for a specific job
  */
 async function processDocumentsForJob(jobId: string, prisma: PrismaClient): Promise<void> {
@@ -183,7 +266,7 @@ async function processDocumentsForJob(jobId: string, prisma: PrismaClient): Prom
   
   logger.info(`Found ${documents.length} documents to process for job ${jobId}`);
   
-  // Process each document (convert HTML to markdown, chunk, create embeddings)
+  // Process each document
   const totalDocs = documents.length;
   let processedDocs = 0;
   
@@ -191,8 +274,16 @@ async function processDocumentsForJob(jobId: string, prisma: PrismaClient): Prom
     try {
       logger.info(`Processing document ${document.id} (${document.title}) for job ${jobId}`);
       
+      // Check if document.metadata is empty and provide default values if necessary
+      const metadata = document.metadata || {
+        package: (job.metadata as JobMetadata)?.packageName || '', // Default package name
+        version: (job.metadata as JobMetadata)?.packageVersion || 'latest', // Default version
+        type: 'documentation', // Default type
+        tags: ['default'], // Default tags
+      };
+
       // Process the document HTML and generate embeddings
-      await documentProcessorService.processDocument(document.id, document.content, document.metadata);
+      await documentProcessorService.processDocument(document.id, document.content, metadata);
       
       // Update job progress
       processedDocs++;
@@ -277,6 +368,19 @@ async function main() {
       default: false,
       describe: 'Delete existing chunks and reprocess all documents for the specified job'
     })
+    .option('package', {
+      type: 'string',
+      describe: 'The name of the package this documentation is for'
+    })
+    .option('version', {
+      type: 'string',
+      describe: 'The version of the package this documentation is for (defaults to "latest")'
+    })
+    .option('skip-prompts', {
+      type: 'boolean',
+      default: false,
+      describe: 'Skip interactive prompts and use provided CLI arguments or defaults'
+    })
     .epilogue('For more information, see the documentation in the README.md file.')
     .help()
     .alias('help', 'h')
@@ -315,6 +419,49 @@ async function main() {
         
         const deletedCount = await clearChunksForJob(job.id, prisma);
         console.log(`Deleted ${deletedCount} existing chunks.`);
+
+        // Check if the job has package metadata
+        const hasPackageInfo = await hasPackageMetadata(job.id, jobService);
+
+        // If package info was provided via CLI, override existing metadata
+        if (argv.package) {
+          const currentMetadata = (job.metadata as Record<string, any>) || {};
+          await jobService.updateJobMetadata(job.id, {
+            ...currentMetadata,
+            packageName: argv.package,
+            packageVersion: argv.version || 'latest'
+          });
+          
+          console.log(`\nPackage mapping ${hasPackageInfo ? 'updated' : 'set'} from arguments: ${argv.package}@${argv.version || 'latest'}`);
+        } 
+        // If no package info and not skipping prompts, ask the user
+        else if (!hasPackageInfo && !argv['skip-prompts']) {
+          console.log(`\nNo package metadata found for job ${job.id}.`);
+          console.log(`Package metadata helps properly categorize and map documentation.`);
+          
+          // Get package information through prompting
+          const packageInfo = await promptForPackageInfo(argv);
+          
+          if (packageInfo.packageName) {
+            // Update job metadata with the package information
+            const currentMetadata = (job.metadata as Record<string, any>) || {};
+            await jobService.updateJobMetadata(job.id, {
+              ...currentMetadata,
+              packageName: packageInfo.packageName,
+              packageVersion: packageInfo.packageVersion
+            });
+            
+            console.log(`\nPackage mapping set: ${packageInfo.packageName}@${packageInfo.packageVersion}`);
+          } else {
+            console.log(`\nNo package mapping set. Documents will not be mapped to a specific package.`);
+          }
+        } 
+        // Just display existing metadata
+        else if (hasPackageInfo) {
+          // Show existing package metadata
+          const metadata = (job.metadata as Record<string, any>) || {};
+          console.log(`\nUsing existing package mapping: ${metadata.packageName}@${metadata.packageVersion || 'latest'}`);
+        }
 
         // Reset job progress and stats before reprocessing
         logger.info(`Resetting progress and stats for job ${job.id} before reprocessing.`);
