@@ -174,6 +174,10 @@ For example, if DocMCP is installed in `/home/user/projects/docmcp`, your config
 
 After adding this configuration, restart Cursor for the changes to take effect.
 
+## Usage
+
+
+
 ## Project Structure
 
 ```
