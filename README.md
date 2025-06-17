@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/visheshd-docmcp-badge.png)](https://mseep.ai/app/visheshd-docmcp)
+
 # DocMCP: Index the latest doc for LLMs on PostgreSQL using pgvector and expose to AI IDEs
 
 A system for crawling, processing, and querying documentation with AI-powered embedding generation and semantic search capabilities.
